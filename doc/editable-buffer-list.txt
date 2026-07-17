@@ -1,0 +1,36 @@
+*editable-buffer-list.txt*
+
+Author: Yogesh Dhamija <yogeshdhamija@outlook.com>
+
+This plugin provides |:BufferList|, which turns the current window into the
+buffer list -- as a plain, editable buffer. It is to buffers roughly what
+oil.nvim is to files: the list is just text, and editing the text edits
+reality.
+
+Deleting a line unloads (|:bdelete|) its buffer, immediately. Because the
+list is a real modifiable buffer, anything that removes text works: `dd`,
+`5dd`, `d2j`, `dG`, `Vd`, `:g/foo/d`. Nothing is remapped for this.
+
+`u` brings an unloaded buffer back. This falls out of how the sync works:
+undo restores the line, and since |:bdelete| only unlists a buffer rather
+than destroying it, the restored line relists it. `CTRL-R` redoes.
+
+<CR> opens the buffer under the cursor in this window. The alternate file is
+preserved (|keepalt|), so CTRL-^ afterwards goes to the buffer the window
+showed before the list -- as if the list was never there. That is also the
+way to leave without picking anything.
+
+Buffers with unsaved changes refuse to unload: the line comes back and the
+|E89| message is shown. Save the buffer first, or use `:bdelete!` yourself if
+you mean to discard the changes. The same happens for anything else
+|:bdelete| refuses, such as a terminal with a running job.
+
+Only the leading buffer number on each line is ever read back; the rest of
+the line is redrawn from the real buffer list after every change. So mangling
+a line's text cannot corrupt anything -- the line is simply redrawn. A
+side effect: writing a bare buffer number on its own line relists that
+buffer, if it exists.
+
+The list buffer itself is 'buftype' nofile and 'bufhidden' wipe: it never
+needs saving (changes apply as you make them), never touches the buffer list
+it is displaying, and cleans up after itself when hidden.
