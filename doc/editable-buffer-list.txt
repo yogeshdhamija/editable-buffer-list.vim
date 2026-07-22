@@ -7,6 +7,13 @@ buffer list -- as a plain, editable buffer. It is to buffers roughly what
 oil.nvim is to files: the list is just text, and editing the text edits
 reality.
 
+The text is |:ls| output, verbatim -- same columns, same flags, same
+alignment. It is produced by running |:ls| in the list's own window, which is
+what makes the markers read correctly: the list buffer is 'nobuflisted', so it
+never appears in its own output and no line is ever marked `%`. The `#` sits on
+the buffer the window was showing before |:BufferList| replaced it, and stays
+there no matter what other windows do.
+
 Deleting a line unloads (|:bdelete|) its buffer, immediately. Because the
 list is a real modifiable buffer, anything that removes text works: `dd`,
 `5dd`, `d2j`, `dG`, `Vd`, `:g/foo/d`. Nothing is remapped for this.

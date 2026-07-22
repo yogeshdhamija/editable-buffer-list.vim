@@ -12,6 +12,8 @@ let g:autoloaded_editable_buffer_list = 1
 " its buffer, a line that came back (undo) relists it. Only the leading buffer
 " number is ever read back from the text; everything else is redrawn from
 " reality, so a mangled line is swept away rather than misread.
+"
+" The text itself is :ls output, verbatim.
 
 function! s:Listed() abort
     return sort(map(getbufinfo({'buflisted': 1}), 'v:val["bufnr"]'), 'n')
@@ -22,18 +24,39 @@ function! s:ParseBufnr(line) abort
     return str2nr(matchstr(a:line, '^\s*\zs\d\+\ze\%(\s\|$\)'))
 endfunction
 
-function! s:Format(bufnr, origin) abort
-    let l:name = bufname(a:bufnr)
-    let l:display = empty(l:name) ? '[No Name]' : fnamemodify(l:name, ':~:.')
-    let l:origin_char = a:bufnr == a:origin ? '%' : ' '
-    let l:modified = getbufvar(a:bufnr, '&modified') ? '+' : ' '
-    return printf('%3d %s%s %s', a:bufnr, l:origin_char, l:modified, l:display)
+" Where to run :ls for a list. Its own window, because that is what makes the
+" markers mean what they say: the list buffer is 'nobuflisted', so it never
+" appears in its own output and no line is ever '%', and '#' is that window's
+" alternate file -- the buffer the list replaced, which does not move when
+" some other window changes buffers. 0 means "nowhere to run it".
+function! s:LsWindow(list_buf) abort
+    if(!exists('*win_execute'))
+        " No way to reach another window's context; only the focused list can
+        " be drawn, which is where :ls would be evaluated anyway.
+        return a:list_buf == bufnr('%') ? win_getid() : 0
+    endif
+    return get(win_findbuf(a:list_buf), 0, 0)
+endfunction
+
+function! s:Capture(winid) abort
+    if(exists('*win_execute'))
+        return win_execute(a:winid, 'ls')
+    endif
+    let l:out = ''
+    redir => l:out
+    silent ls
+    redir END
+    return l:out
 endfunction
 
 function! s:Render(list_buf) abort
-    let l:origin = getbufvar(a:list_buf, 'editable_buffer_list_origin', 0)
-    " We use string concatenation for older Vim map() compatibility
-    let l:lines = map(s:Listed(), 's:Format(v:val, ' . l:origin . ')')
+    let l:winid = s:LsWindow(a:list_buf)
+    if(!l:winid)
+        return
+    endif
+    " :ls leads with a blank line. Left in, it would be a list entry carrying
+    " no buffer number, shifting every real entry down one.
+    let l:lines = filter(split(s:Capture(l:winid), "\n"), 'v:val !=# ""')
     if(empty(l:lines))
         let l:lines = ['']
     endif
@@ -55,19 +78,7 @@ function! s:UpdateAll() abort
     endif
     
     " Find all buffers acting as a buffer list
-    let l:lists = filter(range(1, bufnr('$')), 'getbufvar(v:val, "&filetype") ==# "bufferlist"')
-    if empty(l:lists)
-        return
-    endif
-
-    let l:curbuf = bufnr('%')
-    let l:is_list = getbufvar(l:curbuf, '&filetype') ==# 'bufferlist'
-
-    for l:list_buf in l:lists
-        " Update origin (%) symbol to point to the current active non-list buffer
-        if !l:is_list
-            call setbufvar(l:list_buf, 'editable_buffer_list_origin', l:curbuf)
-        endif
+    for l:list_buf in filter(range(1, bufnr('$')), 'getbufvar(v:val, "&filetype") ==# "bufferlist"')
         call s:Render(l:list_buf)
     endfor
 endfunction
@@ -124,11 +135,13 @@ function! s:Apply() abort
 endfunction
 
 function! editableBufferList#Open() abort
-    if(!exists('b:editable_buffer_list_origin'))
-        let l:origin = bufnr('%')
+    " Re-entrancy: :BufferList from inside a list redraws it in place rather
+    " than nesting a second one.
+    if(&filetype !=# 'bufferlist')
+        " enew makes the buffer this window was showing its alternate, which
+        " is what puts the '#' on it.
         enew
         setlocal buftype=nofile bufhidden=wipe noswapfile nobuflisted nowrap
-        let b:editable_buffer_list_origin = l:origin
         " Purely cosmetic (statusline); harmless to skip if the name is taken
         " because another list window is open.
         silent! execute 'file' fnameescape('[Buffer List]')
@@ -140,8 +153,8 @@ function! editableBufferList#Open() abort
         nnoremap <buffer> <CR> <Cmd>call editableBufferList#OpenUnderCursor()<CR>
     endif
     call s:Render(bufnr('%'))
-    let l:at = index(s:Listed(), b:editable_buffer_list_origin)
-    call cursor(l:at >= 0 ? l:at + 1 : 1, 1)
+    " Start on '#', the buffer this window was showing. Line 1 if it is gone.
+    call cursor(max([1, match(getline(1, '$'), '^\s*\d\+ #') + 1]), 1)
 endfunction
 
 function! editableBufferList#OpenUnderCursor() abort
