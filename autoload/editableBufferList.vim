@@ -49,7 +49,9 @@ function! s:Capture(winid) abort
     return l:out
 endfunction
 
-function! s:Render(list_buf) abort
+" a:1 is a buffer to leave out even though :ls still reports it -- see the
+" BufDelete autocmd below.
+function! s:Render(list_buf, ...) abort
     let l:winid = s:LsWindow(a:list_buf)
     if(!l:winid)
         return
@@ -57,6 +59,11 @@ function! s:Render(list_buf) abort
     " :ls leads with a blank line. Left in, it would be a list entry carrying
     " no buffer number, shifting every real entry down one.
     let l:lines = filter(split(s:Capture(l:winid), "\n"), 'v:val !=# ""')
+    let l:skip = a:0 ? a:1 : 0
+    if(l:skip)
+        " String concatenation for older Vim, which has no lambdas.
+        call filter(l:lines, 's:ParseBufnr(v:val) != ' . l:skip)
+    endif
     if(empty(l:lines))
         let l:lines = ['']
     endif
@@ -71,22 +78,30 @@ function! s:Render(list_buf) abort
     call setbufvar(a:list_buf, '&modified', 0)
 endfunction
 
-function! s:UpdateAll() abort
+function! s:UpdateAll(...) abort
     " Prevent global events from overriding while the user's buffer edits are still processing
     if get(g:, 'editable_buffer_list_applying', 0)
         return
     endif
-    
+
+    let l:skip = a:0 ? a:1 : 0
     " Find all buffers acting as a buffer list
     for l:list_buf in filter(range(1, bufnr('$')), 'getbufvar(v:val, "&filetype") ==# "bufferlist"')
-        call s:Render(l:list_buf)
+        call s:Render(l:list_buf, l:skip)
     endfor
 endfunction
 
 augroup EditableBufferListGlobal
     autocmd!
     " Trigger background list refresh on all relevant global buffer lifecycle and focus events
-    autocmd BufAdd,BufDelete,BufWipeout,BufFilePost,BufEnter,BufWritePost * call s:UpdateAll()
+    autocmd BufAdd,BufFilePost,BufEnter,BufWritePost * call s:UpdateAll()
+    " These two fire *before* the buffer leaves the list, and Vim has no
+    " matching "after" event, so :ls here still reports the buffer that is on
+    " its way out. Rather than defer the redraw until it is really gone, drop
+    " that one buffer from this redraw: <abuf> names it exactly. The event
+    " only fires once the delete is actually going through, so a refused
+    " :bdelete never reaches this and never hides a line that is staying.
+    autocmd BufDelete,BufWipeout * call s:UpdateAll(str2nr(expand('<abuf>')))
 augroup END
 
 function! s:Apply() abort
