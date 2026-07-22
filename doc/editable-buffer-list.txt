@@ -38,6 +38,13 @@ a line's text cannot corrupt anything -- the line is simply redrawn. A
 side effect: writing a bare buffer number on its own line relists that
 buffer, if it exists.
 
-The list buffer itself is 'buftype' nofile and 'bufhidden' wipe: it never
-needs saving (changes apply as you make them), never touches the buffer list
-it is displaying, and cleans up after itself when hidden.
+Navigating away from the list leaves it in the |jumplist|, so CTRL-O comes
+back to it. It is redrawn on arrival, so a list returned to this way shows the
+buffer list as it is now, not as it was when you left.
+
+The list buffer itself is 'buftype' nofile and 'bufhidden' hide: it never
+needs saving (changes apply as you make them) and never touches the buffer
+list it is displaying. It is kept rather than wiped when hidden, because a
+wiped buffer has its |jumplist| entries dropped along with it. Abandoned lists
+are reused by the next |:BufferList| rather than piling up; a list still
+visible in some window is never taken over, so each window keeps its own.

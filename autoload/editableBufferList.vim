@@ -29,6 +29,32 @@ endfunction
 " appears in its own output and no line is ever '%', and '#' is that window's
 " alternate file -- the buffer the list replaced, which does not move when
 " some other window changes buffers. 0 means "nowhere to run it".
+" Whether no window is showing this buffer.
+function! s:Hidden(buf) abort
+    if(exists('*win_findbuf'))
+        return empty(win_findbuf(a:buf))
+    endif
+    " Older Vim can only see the current tab page, so a list parked in another
+    " tab reads as hidden and gets reused. The cost is two windows sharing one
+    " list buffer -- and so disagreeing about '#' -- not a wrong list.
+    return bufwinnr(a:buf) == -1
+endfunction
+
+" An abandoned list to take over, or 0. 'bufhidden' is hide rather than wipe
+" so that jumping away leaves the list intact to jump back to (a wiped buffer
+" has its jumplist entries dropped, so CTRL-O would skip straight past it).
+" That means abandoned lists accumulate unless they are reused, which is what
+" this is for. Lists still on screen are left alone so that each window keeps
+" its own: '%' and '#' are per-window, and one buffer cannot show both.
+function! s:ReusableList() abort
+    for l:b in filter(range(1, bufnr('$')), 'getbufvar(v:val, "&filetype") ==# "bufferlist"')
+        if(s:Hidden(l:b))
+            return l:b
+        endif
+    endfor
+    return 0
+endfunction
+
 function! s:LsWindow(list_buf) abort
     if(!exists('*win_execute'))
         " No way to reach another window's context; only the focused list can
@@ -52,6 +78,12 @@ endfunction
 " a:1 is a buffer to leave out even though :ls still reports it -- see the
 " BufDelete autocmd below.
 function! s:Render(list_buf, ...) abort
+    " Jumping to a buffer relists it, so CTRL-O back into the list undoes the
+    " 'nobuflisted' it was created with -- and a listed list shows up in its
+    " own output, which is exactly what that setting is there to prevent.
+    " Reasserting it here catches that on the BufEnter the jump fires, before
+    " the render below can draw the list a line for itself.
+    call setbufvar(a:list_buf, '&buflisted', 0)
     let l:winid = s:LsWindow(a:list_buf)
     if(!l:winid)
         return
@@ -74,7 +106,9 @@ function! s:Render(list_buf, ...) abort
             call deletebufline(a:list_buf, len(l:lines) + 1, '$')
         endif
     endif
-    " So bufhidden=wipe can discard the list without E89 when it's abandoned.
+    " Every redraw would otherwise leave the list looking dirty, and :bdelete
+    " on it would fail with E89. Nothing is ever lost by clearing this: the
+    " text is regenerated from the real buffer list on the next render.
     call setbufvar(a:list_buf, '&modified', 0)
 endfunction
 
@@ -153,19 +187,35 @@ function! editableBufferList#Open() abort
     " Re-entrancy: :BufferList from inside a list redraws it in place rather
     " than nesting a second one.
     if(&filetype !=# 'bufferlist')
-        " enew makes the buffer this window was showing its alternate, which
-        " is what puts the '#' on it.
-        enew
-        setlocal buftype=nofile bufhidden=wipe noswapfile nobuflisted nowrap
-        " Purely cosmetic (statusline); harmless to skip if the name is taken
-        " because another list window is open.
-        silent! execute 'file' fnameescape('[Buffer List]')
-        setlocal filetype=bufferlist
-        augroup EditableBufferList
-            autocmd! * <buffer>
-            autocmd TextChanged,InsertLeave <buffer> call s:Apply()
-        augroup END
-        nnoremap <buffer> <CR> <Cmd>call editableBufferList#OpenUnderCursor()<CR>
+        let l:reuse = s:ReusableList()
+        if(l:reuse)
+            " Like enew below, :buffer makes the buffer this window was
+            " showing its alternate. The list's own mappings, autocmds and
+            " options came with the buffer, which was hidden rather than
+            " wiped, so there is nothing to set up again.
+            execute 'buffer' l:reuse
+        else
+            " enew makes the buffer this window was showing its alternate,
+            " which is what puts the '#' on it.
+            enew
+            " Deliberately 'nobuflisted'. Listing it would put the list in its
+            " own output, and deleting that line -- with dd, or :%d meaning
+            " "close everything" -- would make s:Apply :bdelete the list from
+            " inside the list's own TextChanged autocmd, leaving a stray
+            " buffer holding stale list text. It would also join :bufdo and
+            " the :bnext rotation, and :mksession would write a `badd
+            " [Buffer List]` that restores as a bogus empty file.
+            setlocal buftype=nofile bufhidden=hide noswapfile nobuflisted nowrap
+            " Purely cosmetic (statusline); harmless to skip if the name is
+            " taken because another list window is open.
+            silent! execute 'file' fnameescape('[Buffer List]')
+            setlocal filetype=bufferlist
+            augroup EditableBufferList
+                autocmd! * <buffer>
+                autocmd TextChanged,InsertLeave <buffer> call s:Apply()
+            augroup END
+            nnoremap <buffer> <CR> <Cmd>call editableBufferList#OpenUnderCursor()<CR>
+        endif
     endif
     call s:Render(bufnr('%'))
     " Start on '#', the buffer this window was showing. Line 1 if it is gone.
