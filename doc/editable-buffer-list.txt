@@ -16,7 +16,8 @@ there no matter what other windows do.
 
 Deleting a line unloads (|:bdelete|) its buffer, immediately. Because the
 list is a real modifiable buffer, anything that removes text works: `dd`,
-`5dd`, `d2j`, `dG`, `Vd`, `:g/foo/d`. Nothing is remapped for this.
+`5dd`, `d2j`, `dG`, `Vd`, `:g/foo/d`. Nothing is remapped for this. The
+command used can be swapped out; see |g:editable_buffer_list_delete_command|.
 
 `u` brings an unloaded buffer back. This falls out of how the sync works:
 undo restores the line, and since |:bdelete| only unlists a buffer rather
@@ -48,3 +49,21 @@ list it is displaying. It is kept rather than wiped when hidden, because a
 wiped buffer has its |jumplist| entries dropped along with it. Abandoned lists
 are reused by the next |:BufferList| rather than piling up; a list still
 visible in some window is never taken over, so each window keeps its own.
+
+				      *g:editable_buffer_list_delete_command*
+The command run for each deleted line, with the buffer number appended. It
+defaults to |:bdelete|: >
+	let g:editable_buffer_list_delete_command = 'bdelete'
+<
+|:bdelete| closes every other window showing the buffer. To keep those
+windows open, point this at a command that moves them onto another buffer
+before deleting, such as vim-bbye's `:Bdelete`, or a user command wrapping
+mini.bufremove's `MiniBufremove.delete()`: >
+	let g:editable_buffer_list_delete_command = 'Bdelete'
+<
+The command must leave the buffer existing but unlisted, as |:bdelete| does;
+that is what lets `u` bring it back. A command that wipes buffers
+(|:bwipeout|) makes every delete permanent. If the command refuses a buffer,
+by raising an error or by leaving it listed, the line comes back. An error's
+message is shown, as with |E89| above. Whether unsaved changes or a running
+job are refused is up to the command.

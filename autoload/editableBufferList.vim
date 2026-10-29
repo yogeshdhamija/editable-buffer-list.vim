@@ -148,13 +148,16 @@ function! s:Apply() abort
     endfor
 
     let l:errors = []
-    
+    " Looked up on every apply rather than once at load, so setting it after
+    " the plugin has loaded still takes effect.
+    let l:delete = get(g:, 'editable_buffer_list_delete_command', 'bdelete')
+
     " Pause auto-updates while manually applying changes from inside the list
     let g:editable_buffer_list_applying = 1
     for l:b in s:Listed()
         if(!has_key(l:visible, l:b))
             try
-                execute 'bdelete' l:b
+                execute l:delete l:b
             catch
                 call add(l:errors, matchstr(v:exception, 'E\d\+.*'))
             endtry
@@ -163,7 +166,8 @@ function! s:Apply() abort
 
     " This is what makes plain u work without a separate undo stack: undo
     " brings the deleted line back, and since :bdelete only unlists (the
-    " buffer still exists), relisting it restores the entry.
+    " buffer still exists), relisting it restores the entry. A configured
+    " delete command has to leave buffers existing for the same reason.
     for l:nr in keys(l:visible)
         let l:b = str2nr(l:nr)
         if(bufexists(l:b) && !buflisted(l:b))
@@ -175,6 +179,16 @@ function! s:Apply() abort
     " Redraw from reality. This converges: the redraw fires one more
     " TextChanged, which then finds text and reality already agreeing. It is
     " also what puts a line back when its buffer refused to unload.
+    "
+    " A delete command that moves into other windows (vim-bbye's does, to
+    " switch them off the buffer) ends the undo block the edit was in, which
+    " would make this redraw an undo step of its own: u would then undo the
+    " redraw rather than the edit. undojoin folds it back in. It is refused
+    " right after an undo or redo, which have no edit to fold it into anyway.
+    try
+        undojoin
+    catch /E790/
+    endtry
     call s:Render(bufnr('%'))
     if(!empty(l:errors))
         echohl WarningMsg
