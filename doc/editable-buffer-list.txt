@@ -26,12 +26,14 @@ was showing before |:BufferList| replaced it, and stays there no matter what
 other windows do.
 
 Above the list are hints: that it is live, what the keys do, and what the
-flags in front of each name mean. Only the flags actually in the list are
-explained, so the legend changes as the list does: >
+flags in front of each name mean, with a rule underneath to set them off from
+the list. Only the flags actually in the list are explained, so the legend
+changes as the list does: >
 
   Live: edits apply at once · no :w needed · keeps itself up to date
   <CR> open · delete lines to :bdelete · u undo · CTRL-^ back · :h :BufferList
   # alternate · h hidden · no a/h: not loaded · + modified · :h :ls
+  ──────────────────────────────────────────────────────────────────────────
     1  h + "init.vim"
     2      "notes.txt"
     3 #h   "plugin.vim"

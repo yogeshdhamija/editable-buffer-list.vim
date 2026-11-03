@@ -179,7 +179,9 @@ function! HintLines() abort
             endfor
         endfor
     elseif(g:hints_supported && !empty(prop_type_get('bufferListHint')))
-        for l:prop in prop_list(1, {'end_lnum': -1, 'types': ['bufferListHint']})
+        " prop_list() gives text above a line last-drawn first: the opposite
+        " of the order on screen, which is the order they were added in.
+        for l:prop in reverse(prop_list(1, {'end_lnum': -1, 'types': ['bufferListHint']}))
             call add(l:found, [get(l:prop, 'text_align', '') ==# 'above' ? l:prop.lnum : -l:prop.lnum, l:prop.text])
         endfor
     endif

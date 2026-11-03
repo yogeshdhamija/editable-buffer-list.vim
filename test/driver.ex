@@ -384,6 +384,9 @@ older builds cannot draw them.
 :if g:hints_supported | call Ok(g:h !~# 'in a window', 'nothing is a, so a is left out') | endif
 :if g:hints_supported | call Is(line('$'), 3, 'the hints are not lines of the buffer') | endif
 :if g:hints_supported | call Is(LineOf('a.txt'), 1, 'so line 1 is still the first entry') | endif
+:let g:rule = get(Hints(), -1, '')
+:if g:hints_supported | call Ok(g:rule =~# '^\%(\%u2500\|-\)\+$', 'the last hint line is a rule, setting them off from the list') | endif
+:if g:hints_supported | call Is(strdisplaywidth(g:rule), winwidth(0), 'running the width of the window') | endif
 
 The legend is redrawn along with the list, so a flag turning up elsewhere
 gets explained. '+' needs watching for: editing a buffer in another window

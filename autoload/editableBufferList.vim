@@ -158,7 +158,8 @@ let s:sep = [' | ', 'bufferListHint']
 " virt_lines format. First that the list is live, then what the keys do,
 " then what the flags in a:lines, which is :ls output, mean. Only the flags
 " that are there: one entry for every flag that could turn up would be too
-" long to read.
+" long to read. Last, a rule across the window, so the hints read as a header
+" rather than running straight into the first entry.
 function! s:HintLines(lines, width) abort
     let l:live = [
         \ [['see ', 'bufferListHint'], [':h :BufferList', 'bufferListHintKey']],
@@ -195,6 +196,10 @@ function! s:HintLines(lines, width) abort
     if(!empty(l:legend))
         call extend(l:hints, s:Wrap(l:legend, a:width))
     endif
+    " Box drawing where the encoding has it. Measured rather than counted as
+    " one cell: it is two wide with 'ambiwidth' double.
+    let l:rule = &encoding ==# 'utf-8' ? "\u2500" : '-'
+    call add(l:hints, [[repeat(l:rule, max([1, a:width / strdisplaywidth(l:rule)])), 'bufferListHint']])
     return l:hints
 endfunction
 
