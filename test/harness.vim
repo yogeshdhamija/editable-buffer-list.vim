@@ -193,6 +193,35 @@ function! Hints() abort
     return map(filter(HintLines(), 'v:val[0] == 1'), 'v:val[1]')
 endfunction
 
+" The window options the list sets: [number, relativenumber, cursorline,
+" signcolumn], leaving out 'signcolumn' in a Vim built without it.
+let g:has_signcolumn = exists('+signcolumn')
+function! WinOpts() abort
+    return [&l:number, &l:relativenumber, &l:cursorline] + (g:has_signcolumn ? [&l:signcolumn] : [])
+endfunction
+" What the list sets them to, and what the tests set them to everywhere else
+" with UsualOpts(): the opposite of the list in every one.
+let g:list_opts = [0, 0, 1] + (g:has_signcolumn ? ['no'] : [])
+let g:usual_opts = [1, 1, 0] + (g:has_signcolumn ? ['yes'] : [])
+function! UsualOpts() abort
+    set number relativenumber nocursorline
+    if(g:has_signcolumn)
+        set signcolumn=yes
+    endif
+endfunction
+function! DefaultOpts() abort
+    set number& relativenumber& cursorline&
+    if(g:has_signcolumn)
+        set signcolumn&
+    endif
+endfunction
+
+" The lines the plugin highlights with a match in place of 'cursorline', as
+" matchaddpos() positions: [[1]] or nothing.
+function! CursorRowMatches() abort
+    return map(filter(getmatches(), 'v:val.group ==# "CursorLine"'), 'v:val.pos1')
+endfunction
+
 " Stand-ins for g:editable_buffer_list_delete_command. Each records what it
 " was asked to delete in g:deleted.
 "

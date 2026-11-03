@@ -291,6 +291,83 @@ The list buffer stays out of the way.
 :call Is(getbufvar(g:list, '&modified'), 0, 'not modified, so :bdelete needs no bang')
 :call Is(getbufvar(g:list, '&swapfile'), 0, 'noswapfile')
 
+The list has no line numbers or sign column, and highlights the cursor's
+row. Those are window options, so it is the window showing the list that
+gets them -- and only while it shows the list.
+
+The cursor is kept off the first entry here: Vim highlights that one
+differently, tested below.
+
+:call Describe('no gutter and a highlighted row, in the list only')
+:call Reset()
+:call UsualOpts()
+:edit a.txt
+:edit b.txt
+:BufferList
+:call Is(line('.'), 2, 'the cursor starts on b.txt, line 2')
+:call Is(WinOpts(), g:list_opts, 'the list window has no gutter, and cursorline')
+:if g:hints_supported | call Is(strdisplaywidth(get(Hints(), -1, '')), winwidth(0), 'the hints are laid out without the gutter') | endif
+:edit c.txt
+:call Is(WinOpts(), g:usual_opts, 'a buffer new to the window gets the usual ones')
+:buffer a.txt
+:call Is(WinOpts(), g:usual_opts, 'a buffer the window showed before the list gets them back too')
+:BufferList
+:call GotoEntry('b.txt')
+:execute "normal \<CR>"
+:call Is(WinOpts(), g:usual_opts, 'and so does one opened from the list with <CR>')
+:BufferList
+:split
+:call Is(WinOpts(), g:list_opts, 'splitting the list window keeps them off in the copy')
+:edit c.txt
+:call Is(WinOpts(), g:usual_opts, 'until that window moves on to another buffer')
+:only
+
+Something else turning the numbers back on in the list -- a :set number
+typed there, say -- is undone the next time the list is shown, and the hints
+are laid out again for the narrower gutter.
+
+:call Describe('coming back to a list resets its window options')
+:BufferList
+:let g:list = bufnr('%')
+:setlocal number
+:edit b.txt
+:execute 'buffer' g:list
+:call Is(WinOpts(), g:list_opts, 'the gutter is gone again')
+:if g:hints_supported | call Is(strdisplaywidth(get(Hints(), -1, '')), winwidth(0), 'and the hints are laid out for that') | endif
+:call DefaultOpts()
+
+Vim draws the hints as part of line 1, and 'cursorline' with them: on the
+first entry it would highlight every hint row too. So there, the row is
+highlighted with a match on the line's own text instead.
+
+:call Describe('in Vim, the first entry is highlighted without the hints')
+:call Reset()
+:let g:vim_hints = g:hints_supported && !has('nvim')
+:if !g:vim_hints | call Skip('only Vim draws the hints as part of line 1') | endif
+:edit b.txt
+:edit a.txt
+:BufferList
+:let g:list = bufnr('%')
+:call Is(line('.'), 1, 'the cursor starts on a.txt, line 1')
+:if g:vim_hints | call Is(&l:cursorline, 0, 'cursorline is off there') | endif
+:if g:vim_hints | call Is(CursorRowMatches(), [[1]], 'and a match highlights line 1 instead') | endif
+:execute "normal! j"
+:if g:vim_hints | call Is(&l:cursorline, 1, 'one line down, cursorline is back') | endif
+:if g:vim_hints | call Is(CursorRowMatches(), [], 'and the match is gone') | endif
+:execute "normal! k"
+:if g:vim_hints | call Is(CursorRowMatches(), [[1]], 'back up, the match is back') | endif
+:edit c.txt
+:call Is(CursorRowMatches(), [], 'leaving the list on line 1 takes the match with it')
+:execute 'buffer' g:list
+:if g:vim_hints | call Is([&l:cursorline, CursorRowMatches()], [0, [[1]]], 'and coming back puts it back') | endif
+:split
+:if g:vim_hints | call Is([&l:cursorline, CursorRowMatches()], [0, [[1]]], 'a split of the list gets one of its own') | endif
+:only
+:let g:editable_buffer_list_hints = 0
+:BufferList
+:call Is([&l:cursorline, CursorRowMatches()], [1, []], 'with no hints, plain cursorline is used')
+:unlet g:editable_buffer_list_hints
+
 :call Describe('the list works with nohidden')
 :call Reset()
 :set nohidden

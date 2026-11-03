@@ -84,6 +84,14 @@ wiped buffer has its |jumplist| entries dropped along with it. Abandoned lists
 are reused by the next |:BufferList| rather than piling up; a list still
 visible in some window is never taken over, so each window keeps its own.
 
+A window showing the list has no line numbers or sign column, and highlights
+the cursor's row ('cursorline'). These are set with |:setlocal| each time the
+list is shown, so they last only as long as the window shows the list: switch
+it to another buffer, and its usual 'number', 'relativenumber', 'signcolumn'
+and 'cursorline' come back. In Vim, with the cursor on the first entry, that
+row is highlighted only as far as its text goes. Vim draws the hints as part
+of the first line, so 'cursorline' there would highlight all of them too.
+
 				      *g:editable_buffer_list_delete_command*
 The command run for each deleted line, with the buffer number appended. It
 defaults to |:bdelete|: >
@@ -116,6 +124,7 @@ The colors come from these groups, each linked by default to the one shown
 
 	bufferListHint		the hints			Comment
 	bufferListHintKey	keys and commands in them	Special
+	bufferListNumber	buffer numbers in the list	Comment
 
 In Neovim, a flag in the legend is colored like the same flag in the list.
 In Vim, a line of virtual text has only one color, so the hints are all

@@ -24,8 +24,10 @@ syntax match bufferListModified /[+x]/ contained
 
 syntax match bufferListNoName /"\[No Name\]"/
 
-" Same groups fzf.vim uses for the same markers, so the list looks familiar.
-highlight default link bufferListNumber Number
+" The flags use the same groups fzf.vim uses for the same markers, so the
+" list looks familiar. The buffer numbers are greyed out like the hints, to
+" keep the eye on the names.
+highlight default link bufferListNumber Comment
 highlight default link bufferListUnlisted Comment
 highlight default link bufferListCurrent Conditional
 highlight default link bufferListAlternate Conditional

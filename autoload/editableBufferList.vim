@@ -275,6 +275,32 @@ function! s:RevealHints() abort
     endif
 endfunction
 
+" Vim draws text above a line as part of that line, and 'cursorline' along
+" with it: with the cursor on the first entry, every row of the hints would be
+" highlighted too, the rule meant to set them apart included. A text property
+" cannot take that back, since highlights only ever add up. So in Vim, on that
+" one line, the row is highlighted with a match instead, which covers the
+" line's own text and nothing above it. A match belongs to the window rather
+" than the buffer, so this also runs on every BufEnter and WinEnter, to take
+" it away from a window that has moved on to some other buffer.
+function! s:CursorRow() abort
+    if(has('nvim') || !s:hints_supported)
+        return
+    endif
+    let l:in_list = &filetype ==# 'bufferlist'
+    let l:first = l:in_list && line('.') == 1 && get(g:, 'editable_buffer_list_hints', 1)
+    if(l:in_list)
+        let &l:cursorline = !l:first
+    endif
+    let l:id = get(w:, 'editable_buffer_list_cursor_row', 0)
+    if(l:first && !l:id)
+        let w:editable_buffer_list_cursor_row = matchaddpos('CursorLine', [1])
+    elseif(!l:first && l:id)
+        silent! call matchdelete(l:id)
+        let w:editable_buffer_list_cursor_row = 0
+    endif
+endfunction
+
 " a:1 is a buffer to leave out even though :ls still reports it -- see the
 " BufDelete autocmd below.
 function! s:Render(list_buf, ...) abort
@@ -307,6 +333,10 @@ function! s:Render(list_buf, ...) abort
         endif
     endif
     call s:DrawHints(a:list_buf, l:lines, l:winid)
+    " The hints may have just been turned on or off.
+    if(l:winid == win_getid())
+        call s:CursorRow()
+    endif
     " Every redraw would otherwise leave the list looking dirty, and :bdelete
     " on it would fail with E89. Nothing is ever lost by clearing this: the
     " text is regenerated from the real buffer list on the next render.
@@ -368,6 +398,7 @@ augroup EditableBufferListGlobal
         autocmd TextChanged,TextChangedI * call s:FollowModified(bufnr('%'))
     endif
     autocmd ColorScheme * call s:DefineHighlights()
+    autocmd BufEnter,WinEnter * call s:CursorRow()
     " The hints are laid out to fit the window, so lay them out again when it
     " changes size.
     autocmd VimResized * call s:UpdateAll()
@@ -435,6 +466,25 @@ function! s:Apply() abort
     endif
 endfunction
 
+" How a window showing a list looks: no line numbers or sign column, which
+" have nothing to say about a list, and the cursor's row highlighted, to show
+" which entry <CR> or dd will act on. These are window options, so they are
+" set each time a list is shown in a window rather than once for the buffer,
+" and with :setlocal, so a window that moves on to another buffer goes back
+" to its usual values (see |local-options|). Returns whether there was a
+" gutter to take away, which means the hints need laying out again.
+function! s:WindowOptions() abort
+    let l:had_gutter = &l:number || &l:relativenumber
+        \ || (exists('+signcolumn') && &l:signcolumn !=# 'no')
+    setlocal nonumber norelativenumber nowrap cursorline
+    if(exists('+signcolumn'))
+        setlocal signcolumn=no
+    endif
+    " Which takes 'cursorline' off again on the first entry, in Vim.
+    call s:CursorRow()
+    return l:had_gutter
+endfunction
+
 function! editableBufferList#Open() abort
     " Re-entrancy: :BufferList from inside a list redraws it in place rather
     " than nesting a second one.
@@ -457,7 +507,7 @@ function! editableBufferList#Open() abort
             " buffer holding stale list text. It would also join :bufdo and
             " the :bnext rotation, and :mksession would write a `badd
             " [Buffer List]` that restores as a bogus empty file.
-            setlocal buftype=nofile bufhidden=hide noswapfile nobuflisted nowrap
+            setlocal buftype=nofile bufhidden=hide noswapfile nobuflisted
             " Purely cosmetic (statusline); harmless to skip if the name is
             " taken because another list window is open.
             silent! execute 'file' fnameescape('[Buffer List]')
@@ -467,15 +517,21 @@ function! editableBufferList#Open() abort
                 autocmd TextChanged,InsertLeave <buffer> call s:Apply()
                 " For gg and the like. Every redraw reveals them too, which
                 " covers opening the list and coming back to it.
-                autocmd CursorMoved <buffer> call s:RevealHints()
+                autocmd CursorMoved <buffer> call s:RevealHints() | call s:CursorRow()
+                " Coming back to the list (CTRL-O), or showing it in another
+                " window. The redraw on BufEnter has already happened by
+                " now, laid out for the gutter the window had then.
+                autocmd BufWinEnter <buffer> if(s:WindowOptions()) | call s:Render(bufnr('%')) | endif
             augroup END
             nnoremap <buffer> <CR> <Cmd>call editableBufferList#OpenUnderCursor()<CR>
         endif
     endif
+    call s:WindowOptions()
     call s:Render(bufnr('%'))
     " Start on '#', the buffer this window was showing. Line 1 if it is gone.
     call cursor(max([1, match(getline(1, '$'), '^\s*\d\+ #') + 1]), 1)
     call s:RevealHints()
+    call s:CursorRow()
 endfunction
 
 function! editableBufferList#OpenUnderCursor() abort
