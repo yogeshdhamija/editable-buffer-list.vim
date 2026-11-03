@@ -118,7 +118,7 @@ let s:flag_meanings = [
     \ ['x',        'x', 'read errors',          'bufferListModified'],
     \ ]
 
-let s:sep = [' · ', 'bufferListHint']
+let s:sep = [' | ', 'bufferListHint']
 
 " The hints, as lines of [text, highlight group] chunks -- Neovim's
 " virt_lines format. First that the list is live, then what the keys do,
@@ -127,13 +127,13 @@ let s:sep = [' · ', 'bufferListHint']
 " long to read.
 function! s:HintLines(lines, width) abort
     let l:live = [
-        \ [['see ', 'bufferListHint'],[':h :BufferList', 'bufferListHintKey'],[' -- Updates Live!', 'bufferListHint']],
+        \ [['see ', 'bufferListHint'],[':h :BufferList', 'bufferListHintKey'],['. Updates Live!', 'bufferListHint']],
         \ ]
     let l:delete = get(g:, 'editable_buffer_list_delete_command', 'bdelete')
     let l:keys = [
-        \ [['open -> ', 'bufferListHint'], ['<CR>', 'bufferListHintKey']],
-        \ [[':' . l:delete, 'bufferListHintKey'], [' -> delete line', 'bufferListHint']],
-        \ [['undo -> ', 'bufferListHint'], ['u', 'bufferListHintKey']],
+        \ [['<CR>', 'bufferListHintKey'], [' to open', 'bufferListHint']],
+        \ [['delete line to ', 'bufferListHintKey'], [':' . l:delete, 'bufferListHint']],
+        \ [['u', 'bufferListHintKey'], [' to undo', 'bufferListHint']],
         \ ]
 
     let l:present = {}
