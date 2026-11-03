@@ -13,7 +13,8 @@ let g:autoloaded_editable_buffer_list = 1
 " number is ever read back from the text; everything else is redrawn from
 " reality, so a mangled line is swept away rather than misread.
 "
-" The text itself is :ls output, verbatim.
+" The text itself is :ls output, sorted by name and without the "line N" at
+" the end of each line -- see s:Tidy.
 
 function! s:Listed() abort
     return sort(map(getbufinfo({'buflisted': 1}), 'v:val["bufnr"]'), 'n')
@@ -22,6 +23,39 @@ endfunction
 " 0 means "no buffer on this line": buffer numbers start at 1.
 function! s:ParseBufnr(line) abort
     return str2nr(matchstr(a:line, '^\s*\zs\d\+\ze\%(\s\|$\)'))
+endfunction
+
+" A line of :ls output up to the closing quote of the name, which drops the
+" padding and the "line N" after it. That number is the cursor line Vim last
+" remembered for the buffer, not where its window's cursor is, so it is
+" usually stale. Cutting at the quote rather than matching "line" also copes
+" with a translated message. A line in some other shape is left alone.
+function! s:StripLnum(line) abort
+    let l:kept = matchstr(a:line, '^\s*\d\+.\{5} ".*"')
+    return empty(l:kept) ? a:line : l:kept
+endfunction
+
+" The quoted name, ignoring case, so that README and readme sort together.
+function! s:SortKey(line) abort
+    return tolower(matchstr(a:line, '^\s*\d\+.\{5}\zs.*'))
+endfunction
+
+" Equal names -- several [No Name] buffers -- fall back to buffer number, so
+" the order never depends on whether this Vim's sort() is stable.
+function! s:CompareNames(a, b) abort
+    let l:a = s:SortKey(a:a)
+    let l:b = s:SortKey(a:b)
+    if(l:a ==# l:b)
+        return s:ParseBufnr(a:a) - s:ParseBufnr(a:b)
+    endif
+    return l:a <# l:b ? -1 : 1
+endfunction
+
+" :ls output as the list shows it: in alphabetical order of name, with no
+" line numbers. Only the leading buffer number is ever read back, so the
+" order is free to be anything.
+function! s:Tidy(lines) abort
+    return sort(map(a:lines, 's:StripLnum(v:val)'), function('s:CompareNames'))
 endfunction
 
 " Where to run :ls for a list. Its own window, because that is what makes the
@@ -251,7 +285,7 @@ function! s:Render(list_buf, ...) abort
     endif
     " :ls leads with a blank line. Left in, it would be a list entry carrying
     " no buffer number, shifting every real entry down one.
-    let l:lines = filter(split(s:Capture(l:winid), "\n"), 'v:val !=# ""')
+    let l:lines = s:Tidy(filter(split(s:Capture(l:winid), "\n"), 'v:val !=# ""'))
     let l:skip = a:0 ? a:1 : 0
     if(l:skip)
         " String concatenation for older Vim, which has no lambdas.

@@ -5,9 +5,9 @@ if(exists("b:current_syntax"))
     finish
 endif
 
-" The text is :ls output. After the buffer number come five fixed flag
-" columns -- unlisted, current/alternate, active/hidden, readonly, modified --
-" then the quoted name and a trailing "line N".
+" The text is :ls output, minus its trailing "line N". After the buffer
+" number come five fixed flag columns -- unlisted, current/alternate,
+" active/hidden, readonly, modified -- then the quoted name.
 " The number and the flags have to be one match with the pieces contained
 " inside it: matching them separately gets only the number highlighted,
 " because the engine resumes scanning past that match and never retries the
@@ -23,7 +23,6 @@ syntax match bufferListReadonly /[-=RF?]/ contained
 syntax match bufferListModified /[+x]/ contained
 
 syntax match bufferListNoName /"\[No Name\]"/
-syntax match bufferListLnum /\<line \d\+$/
 
 " Same groups fzf.vim uses for the same markers, so the list looks familiar.
 highlight default link bufferListNumber Number
@@ -34,6 +33,5 @@ highlight default link bufferListActive Type
 highlight default link bufferListReadonly Constant
 highlight default link bufferListModified Exception
 highlight default link bufferListNoName Comment
-highlight default link bufferListLnum Comment
 
 let b:current_syntax = "bufferlist"

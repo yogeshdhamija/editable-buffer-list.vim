@@ -22,6 +22,32 @@ The list replaces the current window, and does not list itself.
 :call Ok(getline(LineOf('b.txt')) =~# '\d\+ #', 'and b.txt is really marked #')
 
 
+The lines are sorted by name, ignoring case, rather than by buffer number,
+and the "line N" :ls ends each line with is left off. Buffer numbers here run
+c, a, B, so the order on screen and the order of the numbers disagree.
+
+:call Describe('the list is sorted by name, without line numbers')
+:call Reset()
+:edit c.txt
+:edit a.txt
+:badd B.md
+:BufferList
+:call Is(Names(), ['a.txt', 'B.md', 'c.txt'], 'sorted by name, ignoring case')
+:call Is(filter(getline(1, '$'), 'v:val =~# "line"'), [], 'no line ends in a line number')
+:call Ok(getline('.') =~# 'a\.txt', 'the cursor still starts on the # entry')
+:badd aa.txt
+:call Is(Names(), ['a.txt', 'aa.txt', 'B.md', 'c.txt'], 'a buffer added later is drawn in its place')
+:call GotoEntry('B.md')
+:call Sync()
+:execute "normal! dd"
+:call Is(buflisted(bufnr('B.md')), 0, 'dd unloaded B.md, the buffer on that line')
+:call Is(Names(), ['a.txt', 'aa.txt', 'c.txt'], 'and nothing else')
+:call Sync()
+:execute "normal! u"
+:call Is(buflisted(bufnr('B.md')), 1, 'u relisted it')
+:call Is(Names(), ['a.txt', 'aa.txt', 'B.md', 'c.txt'], 'back in its place')
+
+
 <CR> opens the entry under the cursor, in the same window.
 
 :call Describe('<CR> opens the entry under the cursor')

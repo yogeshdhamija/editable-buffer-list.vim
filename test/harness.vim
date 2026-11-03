@@ -89,6 +89,11 @@ function! LineStarting(name) abort
     return match(getline(1, '$'), '\V"' . escape(a:name, '\')) + 1
 endfunction
 
+" The names in the current list, top to bottom.
+function! Names() abort
+    return map(getline(1, '$'), 'matchstr(v:val, ''"\zs.*\ze"'')')
+endfunction
+
 function! GotoEntry(name) abort
     let l:n = LineOf(a:name)
     call Ok(l:n > 0, 'the list has an entry for ' . a:name)
