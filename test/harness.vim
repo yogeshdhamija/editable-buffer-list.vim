@@ -193,20 +193,29 @@ function! Hints() abort
     return map(filter(HintLines(), 'v:val[0] == 1'), 'v:val[1]')
 endfunction
 
-" The window options the list sets: [number, relativenumber, cursorline,
-" signcolumn], leaving out 'signcolumn' in a Vim built without it.
+" The window options the list sets or leaves alone: [number, relativenumber,
+" cursorline, signcolumn, cursorlineopt], leaving out 'signcolumn' and
+" 'cursorlineopt' in a Vim built without them.
 let g:has_signcolumn = exists('+signcolumn')
+let g:has_culopt = exists('+cursorlineopt')
 function! WinOpts() abort
-    return [&l:number, &l:relativenumber, &l:cursorline] + (g:has_signcolumn ? [&l:signcolumn] : [])
+    return [&l:number, &l:relativenumber, &l:cursorline]
+        \ + (g:has_signcolumn ? [&l:signcolumn] : [])
+        \ + (g:has_culopt ? [&l:cursorlineopt] : [])
 endfunction
-" What the list sets them to, and what the tests set them to everywhere else
-" with UsualOpts(): the opposite of the list in every one.
-let g:list_opts = [0, 0, 1] + (g:has_signcolumn ? ['no'] : [])
-let g:usual_opts = [1, 1, 0] + (g:has_signcolumn ? ['yes'] : [])
+" What the tests set them to everywhere else with UsualOpts(): a gutter, and
+" no 'cursorline' -- set, when it is on, to highlight only the line number,
+" which on its own would not show the list's cursor row at all.
+let g:usual_opts = [1, 1, 0] + (g:has_signcolumn ? ['yes'] : []) + (g:has_culopt ? ['number'] : [])
+" What the list makes of them: the same gutter, and the row highlighted.
+let g:list_opts = [1, 1, 1] + (g:has_signcolumn ? ['yes'] : []) + (g:has_culopt ? ['number,line'] : [])
 function! UsualOpts() abort
     set number relativenumber nocursorline
     if(g:has_signcolumn)
         set signcolumn=yes
+    endif
+    if(g:has_culopt)
+        set cursorlineopt=number
     endif
 endfunction
 function! DefaultOpts() abort
@@ -214,6 +223,14 @@ function! DefaultOpts() abort
     if(g:has_signcolumn)
         set signcolumn&
     endif
+    if(g:has_culopt)
+        set cursorlineopt&
+    endif
+endfunction
+
+" How many columns of the current window go to the gutter.
+function! Textoff() abort
+    return get(get(getwininfo(win_getid()), 0, {}), 'textoff', 0)
 endfunction
 
 " The lines the plugin highlights with a match in place of 'cursorline', as

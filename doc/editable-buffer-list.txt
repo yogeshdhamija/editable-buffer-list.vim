@@ -84,13 +84,16 @@ wiped buffer has its |jumplist| entries dropped along with it. Abandoned lists
 are reused by the next |:BufferList| rather than piling up; a list still
 visible in some window is never taken over, so each window keeps its own.
 
-A window showing the list has no line numbers or sign column, and highlights
-the cursor's row ('cursorline'). These are set with |:setlocal| each time the
-list is shown, so they last only as long as the window shows the list: switch
-it to another buffer, and its usual 'number', 'relativenumber', 'signcolumn'
-and 'cursorline' come back. In Vim, with the cursor on the first entry, that
-row is highlighted only as far as its text goes. Vim draws the hints as part
-of the first line, so 'cursorline' there would highlight all of them too.
+A window showing the list highlights the cursor's row ('cursorline'), adding
+"line" to 'cursorlineopt' if it is not there already: set to just "number",
+it would highlight nothing but the line number. Line numbers and the sign
+column are left as the window has them. These are set with |:setlocal| each
+time the list is shown, so they last only as long as the window shows the
+list: switch it to another buffer, and its usual 'cursorline' and
+'cursorlineopt' come back. In Vim, with the cursor on the first entry, that
+row is highlighted only as far as its text goes, plus the line number if
+'cursorlineopt' includes it. Vim draws the hints as part of the first line,
+so 'cursorline' there would highlight all of them too.
 
 				      *g:editable_buffer_list_delete_command*
 The command run for each deleted line, with the buffer number appended. It

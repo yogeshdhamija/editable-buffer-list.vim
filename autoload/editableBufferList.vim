@@ -280,17 +280,24 @@ endfunction
 " highlighted too, the rule meant to set them apart included. A text property
 " cannot take that back, since highlights only ever add up. So in Vim, on that
 " one line, the row is highlighted with a match instead, which covers the
-" line's own text and nothing above it. A match belongs to the window rather
-" than the buffer, so this also runs on every BufEnter and WinEnter, to take
-" it away from a window that has moved on to some other buffer.
+" line's own text and nothing above it. The line number is the exception:
+" with 'cursorlineopt' at "number", Vim highlights it on the line's own row
+" only, so where the option includes the number, that is all it is cut down
+" to. A match belongs to the window rather than the buffer, so this also runs
+" on every BufEnter and WinEnter, to take it away from a window that has
+" moved on to some other buffer.
 function! s:CursorRow() abort
     if(has('nvim') || !s:hints_supported)
         return
     endif
     let l:in_list = &filetype ==# 'bufferlist'
     let l:first = l:in_list && line('.') == 1 && get(g:, 'editable_buffer_list_hints', 1)
-    if(l:in_list)
-        let &l:cursorline = !l:first
+    if(l:in_list && !l:first)
+        call s:HighlightRow()
+    elseif(l:first && &l:cursorlineopt =~# '\<\%(number\|both\)\>')
+        setlocal cursorlineopt=number
+    elseif(l:first)
+        setlocal nocursorline
     endif
     let l:id = get(w:, 'editable_buffer_list_cursor_row', 0)
     if(l:first && !l:id)
@@ -466,23 +473,28 @@ function! s:Apply() abort
     endif
 endfunction
 
-" How a window showing a list looks: no line numbers or sign column, which
-" have nothing to say about a list, and the cursor's row highlighted, to show
-" which entry <CR> or dd will act on. These are window options, so they are
-" set each time a list is shown in a window rather than once for the buffer,
-" and with :setlocal, so a window that moves on to another buffer goes back
-" to its usual values (see |local-options|). Returns whether there was a
-" gutter to take away, which means the hints need laying out again.
-function! s:WindowOptions() abort
-    let l:had_gutter = &l:number || &l:relativenumber
-        \ || (exists('+signcolumn') && &l:signcolumn !=# 'no')
-    setlocal nonumber norelativenumber nowrap cursorline
-    if(exists('+signcolumn'))
-        setlocal signcolumn=no
+" 'cursorline' on, and highlighting the row and not just the line number.
+" A 'cursorlineopt' of only "number" -- a way of keeping 'cursorline' quiet
+" everywhere else -- would leave nothing but the number to show which entry
+" the cursor is on. So "line" is added, keeping whatever else the option has.
+function! s:HighlightRow() abort
+    setlocal cursorline
+    if(exists('+cursorlineopt') && &l:cursorlineopt !~# '\<\%(line\|screenline\|both\)\>')
+        setlocal cursorlineopt+=line
     endif
-    " Which takes 'cursorline' off again on the first entry, in Vim.
+endfunction
+
+" How a window showing a list looks: the cursor's row highlighted, to show
+" which entry <CR> or dd will act on. Line numbers and the sign column are
+" left as the window has them. These are window options, so they are set
+" each time a list is shown in a window rather than once for the buffer, and
+" with :setlocal, so a window that moves on to another buffer goes back to
+" its usual values (see |local-options|).
+function! s:WindowOptions() abort
+    setlocal nowrap
+    call s:HighlightRow()
+    " Which takes the row highlight off again on the first entry, in Vim.
     call s:CursorRow()
-    return l:had_gutter
 endfunction
 
 function! editableBufferList#Open() abort
@@ -519,9 +531,8 @@ function! editableBufferList#Open() abort
                 " covers opening the list and coming back to it.
                 autocmd CursorMoved <buffer> call s:RevealHints() | call s:CursorRow()
                 " Coming back to the list (CTRL-O), or showing it in another
-                " window. The redraw on BufEnter has already happened by
-                " now, laid out for the gutter the window had then.
-                autocmd BufWinEnter <buffer> if(s:WindowOptions()) | call s:Render(bufnr('%')) | endif
+                " window.
+                autocmd BufWinEnter <buffer> call s:WindowOptions()
             augroup END
             nnoremap <buffer> <CR> <Cmd>call editableBufferList#OpenUnderCursor()<CR>
         endif
