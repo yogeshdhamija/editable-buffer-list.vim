@@ -75,6 +75,172 @@ function! s:Capture(winid) abort
     return l:out
 endfunction
 
+" The hints: what the keys do, and what the flags in front of each name mean.
+" They are virtual text above line 1 -- an extmark in Neovim, a text property
+" in Vim -- so they are not part of the buffer: they cannot be edited,
+" deleted or yanked, and are never read back as an entry. Vim got text above
+" a line in 9.0.0438, but it did not work with 'nowrap' until 9.0.0451.
+" Anything older just goes without.
+let s:hints_supported = has('nvim-0.6') || (has('textprop') && has('patch-9.0.0451'))
+
+" Linked here rather than in the syntax file: they have to exist even with
+" syntax off, since Vim refuses a property type with an unknown highlight.
+" A colorscheme clears links like these, hence the autocmd below.
+function! s:DefineHighlights() abort
+    highlight default link bufferListHint Comment
+    highlight default link bufferListHintKey Special
+endfunction
+call s:DefineHighlights()
+
+if(has('nvim'))
+    let s:ns = nvim_create_namespace('editable-buffer-list')
+elseif(s:hints_supported && empty(prop_type_get('bufferListHint')))
+    call prop_type_add('bufferListHint', {'highlight': 'bufferListHint'})
+endif
+
+" What each :ls flag means, in the order of its columns, as [key, flag,
+" meaning, highlight group]. The groups are the syntax file's, so a flag in
+" the legend is colored the same as in the list. 'unloaded' is not a
+" character: it is the a/h column left blank.
+let s:flag_meanings = [
+    \ ['u', 'u', 'unlisted', 'bufferListUnlisted'],
+    \ ['%', '%', 'current window', 'bufferListCurrent'],
+    \ ['#', '#', 'alternate', 'bufferListAlternate'],
+    \ ['a', 'a', 'in a window', 'bufferListActive'],
+    \ ['h', 'h', 'hidden', 'bufferListActive'],
+    \ ['unloaded', '', 'no a/h: not loaded', ''],
+    \ ['-', '-', 'not modifiable', 'bufferListReadonly'],
+    \ ['=', '=', 'read-only', 'bufferListReadonly'],
+    \ ['R', 'R', 'terminal, running', 'bufferListReadonly'],
+    \ ['F', 'F', 'terminal, finished', 'bufferListReadonly'],
+    \ ['?', '?', 'terminal, no job', 'bufferListReadonly'],
+    \ ['+', '+', 'modified', 'bufferListModified'],
+    \ ['x', 'x', 'read errors', 'bufferListModified'],
+    \ ]
+
+let s:sep = [' · ', 'bufferListHint']
+
+" The hints, as lines of [text, highlight group] chunks -- Neovim's
+" virt_lines format. First that the list is live, then what the keys do,
+" then what the flags in a:lines, which is :ls output, mean. Only the flags
+" that are there: one entry for every flag that could turn up would be too
+" long to read.
+function! s:HintLines(lines, width) abort
+    " Worth saying because oil.nvim, which this resembles, holds edits until
+    " :w -- someone expecting that would be surprised by an instant :bdelete.
+    let l:live = [
+        \ [['Live: edits apply at once', 'bufferListHint']],
+        \ [['no ', 'bufferListHint'], [':w', 'bufferListHintKey'], [' needed', 'bufferListHint']],
+        \ [['keeps itself up to date', 'bufferListHint']],
+        \ ]
+    let l:delete = get(g:, 'editable_buffer_list_delete_command', 'bdelete')
+    let l:keys = [
+        \ [['<CR>', 'bufferListHintKey'], [' open', 'bufferListHint']],
+        \ [['delete lines to ', 'bufferListHint'], [':' . l:delete, 'bufferListHintKey']],
+        \ [['u', 'bufferListHintKey'], [' undo', 'bufferListHint']],
+        \ [['CTRL-^', 'bufferListHintKey'], [' back', 'bufferListHint']],
+        \ [[':h :BufferList', 'bufferListHintKey']],
+        \ ]
+
+    let l:present = {}
+    for l:line in a:lines
+        " :ls prints the number, then exactly five flag columns.
+        let l:flags = matchstr(l:line, '^\s*\d\+\zs.\{5}')
+        for l:flag in split(l:flags, '\zs')
+            let l:present[l:flag] = 1
+        endfor
+        if(strlen(l:flags) == 5 && l:flags[2] ==# ' ')
+            let l:present['unloaded'] = 1
+        endif
+    endfor
+    let l:legend = []
+    for [l:key, l:flag, l:meaning, l:group] in s:flag_meanings
+        if(has_key(l:present, l:key))
+            call add(l:legend, empty(l:flag)
+                \ ? [[l:meaning, 'bufferListHint']]
+                \ : [[l:flag, l:group], [' ' . l:meaning, 'bufferListHint']])
+        endif
+    endfor
+
+    let l:hints = s:Wrap(l:live, a:width) + s:Wrap(l:keys, a:width)
+    if(!empty(l:legend))
+        call extend(l:hints, s:Wrap(l:legend + [[[':h :ls', 'bufferListHintKey']]], a:width))
+    endif
+    return l:hints
+endfunction
+
+" Lays a:items -- each a list of chunks -- out in as few lines as fit
+" a:width, with s:sep between them. Neither editor wraps a virtual line, it
+" is cut off at the edge of the window, and losing the end of the legend that
+" way would leave some flag unexplained. An item too wide for a line of its
+" own is still cut off.
+function! s:Wrap(items, width) abort
+    let l:lines = []
+    " Wide enough that the first item starts a line.
+    let l:used = a:width
+    for l:item in a:items
+        let l:item_width = strdisplaywidth(join(map(copy(l:item), 'v:val[0]'), ''))
+        let l:with_sep = strdisplaywidth(s:sep[0]) + l:item_width
+        if(l:used + l:with_sep > a:width)
+            call add(l:lines, copy(l:item))
+            let l:used = l:item_width
+        else
+            call extend(l:lines[-1], [s:sep] + l:item)
+            let l:used += l:with_sep
+        endif
+    endfor
+    return l:lines
+endfunction
+
+" Cleared and redrawn whole every time. Besides being simple, that matters
+" in Vim, where a property belongs to its line: dd on line 1 takes the hints
+" with it, and undo brings that line back with them still attached, next to
+" the ones redrawn in the meantime.
+function! s:DrawHints(list_buf, lines, winid) abort
+    if(!s:hints_supported)
+        return
+    endif
+    let l:hints = []
+    if(get(g:, 'editable_buffer_list_hints', 1))
+        " The hints start where the text does, after any number or sign
+        " column.
+        let l:info = get(getwininfo(a:winid), 0, {})
+        let l:width = get(l:info, 'width', winwidth(0)) - get(l:info, 'textoff', 0)
+        let l:hints = s:HintLines(a:lines, l:width)
+    endif
+    if(has('nvim'))
+        call nvim_buf_clear_namespace(a:list_buf, s:ns, 0, -1)
+        if(!empty(l:hints))
+            call nvim_buf_set_extmark(a:list_buf, s:ns, 0, 0, {'virt_lines': l:hints, 'virt_lines_above': v:true})
+        endif
+        " The number of lines may have changed. win_execute keeps this
+        " script's context, so s: resolves in there.
+        call win_execute(a:winid, 'call s:RevealHints()')
+        return
+    endif
+    call prop_remove({'type': 'bufferListHint', 'bufnr': a:list_buf, 'all': 1})
+    " One color per line: a text property has only the one highlight.
+    for l:chunks in l:hints
+        call prop_add(1, 0, {'type': 'bufferListHint', 'bufnr': a:list_buf, 'text_align': 'above',
+            \ 'text': join(map(copy(l:chunks), 'v:val[0]'), '')})
+    endfor
+endfunction
+
+" Neovim draws lines above line 1 as filler, like diff mode's, and shows
+" them only once the window is scrolled up into them -- which neither opening
+" the list nor gg does. So scroll it there whenever the top of the list is
+" on screen. Vim draws them as part of line 1 and needs none of this.
+function! s:RevealHints() abort
+    if(!has('nvim') || line('w0') != 1)
+        return
+    endif
+    let l:marks = nvim_buf_get_extmarks(0, s:ns, 0, 0, {'details': v:true})
+    let l:height = empty(l:marks) ? 0 : len(get(l:marks[0][3], 'virt_lines', []))
+    if(winsaveview().topfill != l:height)
+        call winrestview({'topfill': l:height})
+    endif
+endfunction
+
 " a:1 is a buffer to leave out even though :ls still reports it -- see the
 " BufDelete autocmd below.
 function! s:Render(list_buf, ...) abort
@@ -106,6 +272,7 @@ function! s:Render(list_buf, ...) abort
             call deletebufline(a:list_buf, len(l:lines) + 1, '$')
         endif
     endif
+    call s:DrawHints(a:list_buf, l:lines, l:winid)
     " Every redraw would otherwise leave the list looking dirty, and :bdelete
     " on it would fail with E89. Nothing is ever lost by clearing this: the
     " text is regenerated from the real buffer list on the next render.
@@ -125,6 +292,28 @@ function! s:UpdateAll(...) abort
     endfor
 endfunction
 
+" Redraws the lists if any of them has a:buf's '+' flag wrong. Checking
+" first is what makes running this after every change in Vim affordable: it
+" reruns :ls only when the flag would actually change, not per keystroke.
+function! s:FollowModified(buf) abort
+    " A list's own edits are for its TextChanged to apply. A list never shows
+    " itself, so this would usually find nothing to do anyway -- but a line
+    " being typed into it can look like an entry, and a redraw would wipe it.
+    if(getbufvar(a:buf, '&filetype') ==# 'bufferlist')
+        return
+    endif
+    let l:modified = getbufvar(a:buf, '&modified')
+    for l:list_buf in filter(range(1, bufnr('$')), 'getbufvar(v:val, "&filetype") ==# "bufferlist"')
+        let l:lines = getbufline(l:list_buf, 1, '$')
+        let l:i = match(l:lines, '^\s*' . a:buf . '\>')
+        " '+' is the fifth flag column.
+        if(l:i >= 0 && (l:lines[l:i] =~# '^\s*\d\+.\{4}+') != l:modified)
+            call s:UpdateAll()
+            return
+        endif
+    endfor
+endfunction
+
 augroup EditableBufferListGlobal
     autocmd!
     " Trigger background list refresh on all relevant global buffer lifecycle and focus events
@@ -136,6 +325,21 @@ augroup EditableBufferListGlobal
     " only fires once the delete is actually going through, so a refused
     " :bdelete never reaches this and never hides a line that is staying.
     autocmd BufDelete,BufWipeout * call s:UpdateAll(str2nr(expand('<abuf>')))
+    " For the '+' flag: editing a buffer in another window fires none of the
+    " above. Neovim has an event for 'modified' changing; Vim does not, so it
+    " has to look after every change.
+    if(exists('##BufModifiedSet'))
+        autocmd BufModifiedSet * call s:FollowModified(str2nr(expand('<abuf>')))
+    else
+        autocmd TextChanged,TextChangedI * call s:FollowModified(bufnr('%'))
+    endif
+    autocmd ColorScheme * call s:DefineHighlights()
+    " The hints are laid out to fit the window, so lay them out again when it
+    " changes size.
+    autocmd VimResized * call s:UpdateAll()
+    if(exists('##WinResized'))
+        autocmd WinResized * call s:UpdateAll()
+    endif
 augroup END
 
 function! s:Apply() abort
@@ -227,6 +431,9 @@ function! editableBufferList#Open() abort
             augroup EditableBufferList
                 autocmd! * <buffer>
                 autocmd TextChanged,InsertLeave <buffer> call s:Apply()
+                " For gg and the like. Every redraw reveals them too, which
+                " covers opening the list and coming back to it.
+                autocmd CursorMoved <buffer> call s:RevealHints()
             augroup END
             nnoremap <buffer> <CR> <Cmd>call editableBufferList#OpenUnderCursor()<CR>
         endif
@@ -234,6 +441,7 @@ function! editableBufferList#Open() abort
     call s:Render(bufnr('%'))
     " Start on '#', the buffer this window was showing. Line 1 if it is gone.
     call cursor(max([1, match(getline(1, '$'), '^\s*\d\+ #') + 1]), 1)
+    call s:RevealHints()
 endfunction
 
 function! editableBufferList#OpenUnderCursor() abort

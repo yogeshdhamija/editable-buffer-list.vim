@@ -2,10 +2,18 @@
 
 Author: Yogesh Dhamija <yogeshdhamija@outlook.com>
 
+								 *:BufferList*
 This plugin provides |:BufferList|, which turns the current window into the
 buffer list -- as a plain, editable buffer. It is to buffers roughly what
 oil.nvim is to files: the list is just text, and editing the text edits
 reality.
+
+Unlike oil.nvim, there is nothing to save: every edit applies the moment it
+is made. And the list keeps itself up to date: it redraws whenever a buffer
+is opened, deleted, renamed, written or modified, in any window, and when
+windows open or close. A few changes fire no event for it to catch, and
+show up at the next redraw instead: |:bunload|, or a terminal's job
+ending.
 
 The text is |:ls| output, verbatim -- same columns, same flags, same
 alignment. It is produced by running |:ls| in the list's own window, which is
@@ -13,6 +21,27 @@ what makes the markers read correctly: the list buffer is 'nobuflisted', so it
 never appears in its own output and no line is ever marked `%`. The `#` sits on
 the buffer the window was showing before |:BufferList| replaced it, and stays
 there no matter what other windows do.
+
+Above the list are hints: that it is live, what the keys do, and what the
+flags in front of each name mean. Only the flags actually in the list are
+explained, so the legend changes as the list does: >
+
+  Live: edits apply at once · no :w needed · keeps itself up to date
+  <CR> open · delete lines to :bdelete · u undo · CTRL-^ back · :h :BufferList
+  # alternate · h hidden · no a/h: not loaded · + modified · :h :ls
+    1  h + "init.vim"                     line 12
+    2      "notes.txt"                    line 0
+    3 #h   "plugin.vim"                   line 1
+<
+"no a/h" is the third flag column left blank: the buffer is listed, but not
+loaded, as after |:badd| or restoring a session. The full table of flags is
+at |:ls|.
+
+The hints are virtual text, not lines of the buffer: they cannot be edited,
+deleted or yanked, and line 1 is still the first buffer. They take as many
+lines as it takes to fit the window, rather than being cut off at its edge.
+They need Neovim, or Vim 9.0.0451 or later; older versions go without. Turn
+them off with |g:editable_buffer_list_hints|.
 
 Deleting a line unloads (|:bdelete|) its buffer, immediately. Because the
 list is a real modifiable buffer, anything that removes text works: `dd`,
@@ -67,3 +96,22 @@ that is what lets `u` bring it back. A command that wipes buffers
 by raising an error or by leaving it listed, the line comes back. An error's
 message is shown, as with |E89| above. Whether unsaved changes or a running
 job are refused is up to the command.
+
+					*g:editable_buffer_list_hints*
+Whether to draw the hints above the list. Defaults to 1; set it to 0 to turn
+them off: >
+	let g:editable_buffer_list_hints = 0
+<
+Like the delete command, it is read on every redraw, so changing it takes
+effect the next time the list is drawn.
+
+				      *editable-buffer-list-highlights*
+The colors come from these groups, each linked by default to the one shown
+(see |highlight-groups|):
+
+	bufferListHint		the hints			Comment
+	bufferListHintKey	keys and commands in them	Special
+
+In Neovim, a flag in the legend is colored like the same flag in the list.
+In Vim, a line of virtual text has only one color, so the hints are all
+bufferListHint.

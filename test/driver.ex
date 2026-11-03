@@ -334,4 +334,143 @@ other window showing the buffer, which is the reason to swap it.
 :call Ok(LineOf('a.txt') > 0, 'so its line came back')
 :unlet g:editable_buffer_list_delete_command
 
+
+The hints above the list: what the keys do and what the flags mean. They are
+virtual text, not lines of the buffer. Gated like the terminal tests, since
+older builds cannot draw them.
+
+:call Describe('hints explain the keys and the flags in the list')
+:call Reset()
+:edit a.txt
+:call setline(1, 'unsaved change')
+:badd c.txt
+:edit b.txt
+:BufferList
+:if !g:hints_supported | call Skip('this build cannot draw virtual text above a line, skipping hints') | endif
+:let g:h = join(Hints(), "\n")
+:if g:hints_supported | call Ok(g:h =~# 'Live: edits apply at once', 'it says edits apply without :w') | endif
+:if g:hints_supported | call Ok(g:h =~# '<CR> open', 'the keys are explained') | endif
+:if g:hints_supported | call Ok(g:h =~# 'delete lines to :bdelete', 'naming the delete command') | endif
+:if g:hints_supported | call Ok(g:h =~# '# alternate', 'b.txt is #, so # is explained') | endif
+:if g:hints_supported | call Ok(g:h =~# 'h hidden', 'a.txt is h, so h is explained') | endif
+:if g:hints_supported | call Ok(g:h =~# '+ modified', 'a.txt is +, so + is explained') | endif
+:if g:hints_supported | call Ok(g:h =~# 'no a/h: not loaded', 'c.txt is not loaded, so that is explained') | endif
+:if g:hints_supported | call Ok(g:h !~# 'in a window', 'nothing is a, so a is left out') | endif
+:if g:hints_supported | call Ok(g:h =~# ':h :ls', 'and :ls help is pointed to') | endif
+:if g:hints_supported | call Is(line('$'), 3, 'the hints are not lines of the buffer') | endif
+:if g:hints_supported | call Is(LineOf('a.txt'), 1, 'so line 1 is still the first entry') | endif
+
+The legend is redrawn along with the list, so a flag turning up elsewhere
+gets explained. '+' needs watching for: editing a buffer in another window
+fires none of the events that redraw the list otherwise.
+
+:call Describe('a buffer modified in another window shows up as +')
+:call Reset()
+:edit a.txt
+:BufferList
+:let g:list = bufnr('%')
+:split
+:edit b.txt
+:let g:clean = '\d\+  a   "b.txt"'
+:let g:dirty = '\d\+  a + "b.txt"'
+:call Ok(match(getbufline(g:list, 1, '$'), g:clean) >= 0, 'b.txt starts out unmodified, in a window')
+:call Sync()
+:call setline(1, 'unsaved change')
+:call Ok(match(getbufline(g:list, 1, '$'), g:dirty) >= 0, 'the list shows it modified')
+:wincmd p
+:if g:hints_supported | call Ok(join(Hints()) =~# '+ modified', 'and the legend explains +') | endif
+:wincmd p
+:execute "normal! u"
+:call Ok(match(getbufline(g:list, 1, '$'), g:clean) >= 0, 'undoing back to unmodified clears it')
+:call Sync()
+:call setline(1, 'unsaved change')
+:write
+:call Ok(match(getbufline(g:list, 1, '$'), g:clean) >= 0, 'so does writing')
+:call setline(1, 'another change')
+:call Ok(match(getbufline(g:list, 1, '$'), g:dirty) >= 0, 'and changing it again after the write shows it again')
+:only!
+
+The list's lines are what gets redrawn after every change, so the hints
+must not end up duplicated or left behind on some other line. In Vim, a
+property belongs to its line: dd takes it along, and u brings it back.
+
+:call Describe('the hints stay one set, above line 1, through dd and u')
+:call Reset()
+:edit a.txt
+:edit b.txt
+:BufferList
+:call Sync()
+:execute "normal! ggdd"
+:call Is(buflisted(bufnr('a.txt')), 0, 'dd on line 1 unloaded a.txt')
+:if g:hints_supported | call Is(len(filter(HintLines(), 'v:val[1] =~# "<CR> open"')), 1, 'one set of hints after dd') | endif
+:if g:hints_supported | call Is(filter(HintLines(), 'v:val[0] != 1'), [], 'all of them above the new line 1') | endif
+:call Sync()
+:execute "normal! u"
+:call Is(buflisted(bufnr('a.txt')), 1, 'u relisted a.txt')
+:if g:hints_supported | call Is(len(filter(HintLines(), 'v:val[1] =~# "<CR> open"')), 1, 'still one set after u') | endif
+:if g:hints_supported | call Is(filter(HintLines(), 'v:val[0] != 1'), [], 'still all above line 1') | endif
+:call Is(&modified, 0, 'drawing them does not leave the list modified')
+
+:call Describe('the hints name a configured delete command')
+:call Reset()
+:let g:editable_buffer_list_delete_command = 'KeepWindowsDelete'
+:edit a.txt
+:BufferList
+:if g:hints_supported | call Ok(join(Hints()) =~# 'delete lines to :KeepWindowsDelete', 'the configured command is shown') | endif
+:unlet g:editable_buffer_list_delete_command
+
+:call Describe('g:editable_buffer_list_hints = 0 turns them off')
+:call Reset()
+:edit a.txt
+:BufferList
+:let g:editable_buffer_list_hints = 0
+:BufferList
+:call Is(HintLines(), [], 'no hints once turned off')
+:call Ok(LineOf('a.txt') > 0, 'and the list itself is unaffected')
+:unlet g:editable_buffer_list_hints
+:BufferList
+:if g:hints_supported | call Ok(!empty(Hints()), 'and they come back when it is unset') | endif
+
+Neither editor wraps a virtual line, so the hints are laid out to fit the
+window, and laid out again when it is resized.
+
+:call Describe('the hints wrap to fit the window')
+:call Reset()
+:edit a.txt
+:call setline(1, 'unsaved change')
+:badd c.txt
+:edit b.txt
+:vsplit
+:vertical resize 30
+:BufferList
+:let g:narrow = Hints()
+:if g:hints_supported | call Ok(len(g:narrow) > 2, 'a narrow window gets more than two lines') | endif
+:if g:hints_supported | call Is(filter(copy(g:narrow), 'strdisplaywidth(v:val) > winwidth(0)'), [], 'none wider than the window') | endif
+:if g:hints_supported | call Ok(join(g:narrow) =~# ':h :ls', 'the end of the legend is still there') | endif
+:only
+:let g:skip_resize = !g:hints_supported || !exists('##WinResized')
+:if !g:skip_resize | call Ok(len(Hints()) < len(g:narrow), 'widening the window took fewer lines') | endif
+:if g:skip_resize | call Skip('no WinResized in this build') | endif
+
+Neovim draws lines above line 1 as filler, and only shows them once the
+window is scrolled up into them, which the plugin has to do itself.
+
+:call Describe('Neovim scrolls the hints into view')
+:call Reset()
+:let g:nvim = has('nvim')
+:if !g:nvim | call Skip('Vim draws them as part of line 1') | endif
+:edit a.txt
+:edit b.txt
+:BufferList
+:if g:nvim | call Is(winsaveview().topfill, len(Hints()), 'opening the list shows them') | endif
+:edit c.txt
+:execute "normal! \<C-O>"
+:if g:nvim | call Is(winsaveview().topfill, len(Hints()), 'so does coming back with CTRL-O') | endif
+:for g:i in range(&lines * 2) | execute 'badd' 'extra' . g:i | endfor
+:BufferList
+:execute "normal! G"
+:call Ok(line('w0') > 1, 'G scrolled the long list off its top')
+:execute "normal! gg"
+:if g:nvim | call Is(winsaveview().topfill, len(Hints()), 'and gg shows them again') | endif
+
 :call Finish()

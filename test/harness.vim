@@ -156,6 +156,36 @@ function! StopTerm() abort
     let g:term = 0
 endfunction
 
+" Same test as the plugin's: Neovim's extmarks, or Vim's text properties
+" once they can go above a line and work with 'nowrap'.
+let g:hints_supported = has('nvim-0.6') || (has('textprop') && has('patch-9.0.0451'))
+
+" Every hint line in the current buffer as [lnum, text]: the line it is
+" drawn above, and what it says.
+function! HintLines() abort
+    let l:found = []
+    if(has('nvim'))
+        " Returns the plugin's namespace, since it already exists.
+        let l:ns = nvim_create_namespace('editable-buffer-list')
+        for l:mark in nvim_buf_get_extmarks(0, l:ns, 0, -1, {'details': v:true})
+            for l:chunks in get(l:mark[3], 'virt_lines', [])
+                call add(l:found, [l:mark[1] + (get(l:mark[3], 'virt_lines_above') ? 1 : 2),
+                    \ join(map(copy(l:chunks), 'v:val[0]'), '')])
+            endfor
+        endfor
+    elseif(g:hints_supported && !empty(prop_type_get('bufferListHint')))
+        for l:prop in prop_list(1, {'end_lnum': -1, 'types': ['bufferListHint']})
+            call add(l:found, [get(l:prop, 'text_align', '') ==# 'above' ? l:prop.lnum : -l:prop.lnum, l:prop.text])
+        endfor
+    endif
+    return l:found
+endfunction
+
+" What the hints above line 1 say, one string per line.
+function! Hints() abort
+    return map(filter(HintLines(), 'v:val[0] == 1'), 'v:val[1]')
+endfunction
+
 " Stand-ins for g:editable_buffer_list_delete_command. Each records what it
 " was asked to delete in g:deleted.
 "
