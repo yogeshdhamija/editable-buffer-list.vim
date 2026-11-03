@@ -349,14 +349,13 @@ older builds cannot draw them.
 :if !g:hints_supported | call Skip('this build cannot draw virtual text above a line, skipping hints') | endif
 :let g:h = join(Hints(), "\n")
 :if g:hints_supported | call Ok(g:h =~# 'Updates Live', 'it says edits apply without :w') | endif
-:if g:hints_supported | call Ok(g:h =~# '<CR> = open', 'the keys are explained') | endif
-:if g:hints_supported | call Ok(g:h =~# 'delete line = :bdelete', 'naming the delete command') | endif
-:if g:hints_supported | call Ok(g:h =~# '# alternate', 'b.txt is #, so # is explained') | endif
-:if g:hints_supported | call Ok(g:h =~# 'h hidden', 'a.txt is h, so h is explained') | endif
-:if g:hints_supported | call Ok(g:h =~# '+ modified', 'a.txt is +, so + is explained') | endif
-:if g:hints_supported | call Ok(g:h =~# 'no a/h: not loaded', 'c.txt is not loaded, so that is explained') | endif
+:if g:hints_supported | call Ok(g:h =~# '<CR> to open', 'the keys are explained') | endif
+:if g:hints_supported | call Ok(g:h =~# 'delete line to :bdelete', 'naming the delete command') | endif
+:if g:hints_supported | call Ok(g:h =~# '# = alternate', 'b.txt is #, so # is explained') | endif
+:if g:hints_supported | call Ok(g:h =~# 'h = hidden', 'a.txt is h, so h is explained') | endif
+:if g:hints_supported | call Ok(g:h =~# '+ = modified', 'a.txt is +, so + is explained') | endif
+:if g:hints_supported | call Ok(g:h =~# 'no a or h = unloaded', 'c.txt is not loaded, so that is explained') | endif
 :if g:hints_supported | call Ok(g:h !~# 'in a window', 'nothing is a, so a is left out') | endif
-:if g:hints_supported | call Ok(g:h =~# ':h :ls', 'and :ls help is pointed to') | endif
 :if g:hints_supported | call Is(line('$'), 3, 'the hints are not lines of the buffer') | endif
 :if g:hints_supported | call Is(LineOf('a.txt'), 1, 'so line 1 is still the first entry') | endif
 
@@ -378,7 +377,7 @@ fires none of the events that redraw the list otherwise.
 :call setline(1, 'unsaved change')
 :call Ok(match(getbufline(g:list, 1, '$'), g:dirty) >= 0, 'the list shows it modified')
 :wincmd p
-:if g:hints_supported | call Ok(join(Hints()) =~# '+ modified', 'and the legend explains +') | endif
+:if g:hints_supported | call Ok(join(Hints()) =~# '+ = modified', 'and the legend explains +') | endif
 :wincmd p
 :execute "normal! u"
 :call Ok(match(getbufline(g:list, 1, '$'), g:clean) >= 0, 'undoing back to unmodified clears it')
@@ -402,12 +401,12 @@ property belongs to its line: dd takes it along, and u brings it back.
 :call Sync()
 :execute "normal! ggdd"
 :call Is(buflisted(bufnr('a.txt')), 0, 'dd on line 1 unloaded a.txt')
-:if g:hints_supported | call Is(len(filter(HintLines(), 'v:val[1] =~# "<CR> open"')), 1, 'one set of hints after dd') | endif
+:if g:hints_supported | call Is(len(filter(HintLines(), 'v:val[1] =~# "<CR> to open"')), 1, 'one set of hints after dd') | endif
 :if g:hints_supported | call Is(filter(HintLines(), 'v:val[0] != 1'), [], 'all of them above the new line 1') | endif
 :call Sync()
 :execute "normal! u"
 :call Is(buflisted(bufnr('a.txt')), 1, 'u relisted a.txt')
-:if g:hints_supported | call Is(len(filter(HintLines(), 'v:val[1] =~# "<CR> open"')), 1, 'still one set after u') | endif
+:if g:hints_supported | call Is(len(filter(HintLines(), 'v:val[1] =~# "<CR> to open"')), 1, 'still one set after u') | endif
 :if g:hints_supported | call Is(filter(HintLines(), 'v:val[0] != 1'), [], 'still all above line 1') | endif
 :call Is(&modified, 0, 'drawing them does not leave the list modified')
 
@@ -416,7 +415,7 @@ property belongs to its line: dd takes it along, and u brings it back.
 :let g:editable_buffer_list_delete_command = 'KeepWindowsDelete'
 :edit a.txt
 :BufferList
-:if g:hints_supported | call Ok(join(Hints()) =~# 'delete lines to :KeepWindowsDelete', 'the configured command is shown') | endif
+:if g:hints_supported | call Ok(join(Hints()) =~# 'delete line to :KeepWindowsDelete', 'the configured command is shown') | endif
 :unlet g:editable_buffer_list_delete_command
 
 :call Describe('g:editable_buffer_list_hints = 0 turns them off')
@@ -446,7 +445,6 @@ window, and laid out again when it is resized.
 :let g:narrow = Hints()
 :if g:hints_supported | call Ok(len(g:narrow) > 2, 'a narrow window gets more than two lines') | endif
 :if g:hints_supported | call Is(filter(copy(g:narrow), 'strdisplaywidth(v:val) > winwidth(0)'), [], 'none wider than the window') | endif
-:if g:hints_supported | call Ok(join(g:narrow) =~# ':h :ls', 'the end of the legend is still there') | endif
 :only
 :let g:skip_resize = !g:hints_supported || !exists('##WinResized')
 :if !g:skip_resize | call Ok(len(Hints()) < len(g:narrow), 'widening the window took fewer lines') | endif

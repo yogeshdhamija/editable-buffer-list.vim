@@ -127,12 +127,13 @@ let s:sep = [' | ', 'bufferListHint']
 " long to read.
 function! s:HintLines(lines, width) abort
     let l:live = [
-        \ [['see ', 'bufferListHint'],[':h :BufferList', 'bufferListHintKey'],['. Updates Live!', 'bufferListHint']],
+        \ [['see ', 'bufferListHint'], [':h :BufferList', 'bufferListHintKey']],
+        \ [['Updates Live!', 'bufferListHint']],
         \ ]
     let l:delete = get(g:, 'editable_buffer_list_delete_command', 'bdelete')
     let l:keys = [
         \ [['<CR>', 'bufferListHintKey'], [' to open', 'bufferListHint']],
-        \ [['delete line to ', 'bufferListHintKey'], [':' . l:delete, 'bufferListHint']],
+        \ [['delete line', 'bufferListHintKey'], [' to :' . l:delete, 'bufferListHint']],
         \ [['u', 'bufferListHintKey'], [' to undo', 'bufferListHint']],
         \ ]
 
@@ -158,7 +159,7 @@ function! s:HintLines(lines, width) abort
 
     let l:hints = s:Wrap(l:live, a:width) + s:Wrap(l:keys, a:width)
     if(!empty(l:legend))
-        call extend(l:hints, s:Wrap(l:legend + [[[':h :ls', 'bufferListHintKey']]], a:width))
+        call extend(l:hints, s:Wrap(l:legend, a:width))
     endif
     return l:hints
 endfunction

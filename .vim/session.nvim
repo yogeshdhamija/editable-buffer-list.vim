@@ -10,17 +10,29 @@ if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
 endif
 let s:shortmess_save = &shortmess
 set shortmess+=aoO
-badd +163 autoload/editableBufferList.vim
+badd +154 autoload/editableBufferList.vim
 badd +1 term://~/Stuff/editable-buffer-list.vim//15018:/bin/bash
-badd +7 Grug\ FAR\ -\ 1:\ it\ says\ edi
 badd +354 test/driver.ex
-badd +1 oil:///home/ydhamija96/Stuff/editable-buffer-list.vim/
-badd +1 \[Buffer\ List]
-badd +0 ~/Stuff/editable-buffer-list.vim/.git/COMMIT_EDITMSG
 argglobal
 %argdel
 $argadd ~/Stuff/editable-buffer-list.vim/.git/COMMIT_EDITMSG
 $argadd oil:///home/ydhamija96/Stuff/editable-buffer-list.vim/
+set stal=2
+tabnew +setlocal\ bufhidden=wipe
+tabrewind
+argglobal
+enew
+file \[Plugins]
+balt term://~/Stuff/editable-buffer-list.vim//15018:/bin/bash
+setlocal foldmethod=expr
+setlocal foldexpr=v:lua.vim.treesitter.foldexpr()
+setlocal foldmarker={{{,}}}
+setlocal foldignore=#
+setlocal foldlevel=99
+setlocal foldminlines=1
+setlocal foldnestmax=20
+setlocal foldenable
+tabnext
 edit test/driver.ex
 let s:save_splitbelow = &splitbelow
 let s:save_splitright = &splitright
@@ -59,7 +71,6 @@ if bufexists(fnamemodify("test/driver.ex", ":p")) | buffer test/driver.ex | else
 if &buftype ==# 'terminal'
   silent file test/driver.ex
 endif
-balt Grug\ FAR\ -\ 1:\ it\ says\ edi
 setlocal foldmethod=expr
 setlocal foldexpr=v:lua.vim.treesitter.foldexpr()
 setlocal foldmarker={{{,}}}
@@ -91,16 +102,18 @@ setlocal foldnestmax=20
 setlocal foldenable
 128
 sil! normal! zo
-let s:l = 135 - ((12 * winheight(0) + 16) / 33)
+171
+sil! normal! zo
+let s:l = 121 - ((16 * winheight(0) + 16) / 33)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 135
-normal! 0
+keepjumps 121
+normal! 016|
 wincmd w
 argglobal
 enew
-balt \[Buffer\ List]
+file \[Buffer\ List]
 setlocal foldmethod=expr
 setlocal foldexpr=v:lua.vim.treesitter.foldexpr()
 setlocal foldmarker={{{,}}}
@@ -115,7 +128,6 @@ if bufexists(fnamemodify("term://~/Stuff/editable-buffer-list.vim//15018:/bin/ba
 if &buftype ==# 'terminal'
   silent file term://~/Stuff/editable-buffer-list.vim//15018:/bin/bash
 endif
-balt ~/Stuff/editable-buffer-list.vim/.git/COMMIT_EDITMSG
 setlocal foldmethod=expr
 setlocal foldexpr=v:lua.vim.treesitter.foldexpr()
 setlocal foldmarker={{{,}}}
@@ -124,14 +136,13 @@ setlocal foldlevel=99
 setlocal foldminlines=1
 setlocal foldnestmax=20
 setlocal foldenable
-let s:l = 24 - ((23 * winheight(0) + 16) / 33)
+let s:l = 3 - ((2 * winheight(0) + 16) / 33)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 24
-normal! 08|
+keepjumps 3
+normal! 07|
 wincmd w
-4wincmd w
 exe '1resize ' . ((&lines * 32 + 34) / 68)
 exe 'vert 1resize ' . ((&columns * 127 + 127) / 254)
 exe '2resize ' . ((&lines * 33 + 34) / 68)
@@ -141,6 +152,7 @@ exe 'vert 3resize ' . ((&columns * 126 + 127) / 254)
 exe '4resize ' . ((&lines * 33 + 34) / 68)
 exe 'vert 4resize ' . ((&columns * 126 + 127) / 254)
 tabnext 1
+set stal=1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
   silent exe 'bwipe ' . s:wipebuf
 endif
@@ -155,7 +167,6 @@ if filereadable(s:sx)
 endif
 let &g:so = s:so_save | let &g:siso = s:siso_save
 set hlsearch
-nohlsearch
 doautoall SessionLoadPost
 unlet SessionLoad
 " vim: set ft=vim :
