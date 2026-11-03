@@ -1,0 +1,121 @@
+let SessionLoad = 1
+let s:so_save = &g:so | let s:siso_save = &g:siso | setg so=0 siso=0 | setl so=-1 siso=-1
+let v:this_session=expand("<sfile>:p")
+doautoall SessionLoadPre
+silent only
+silent tabonly
+cd ~/Stuff/editable-buffer-list.vim
+if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
+  let s:wipebuf = bufnr('%')
+endif
+let s:shortmess_save = &shortmess
+set shortmess+=aoO
+badd +112 autoload/editableBufferList.vim
+badd +1 term://~/Stuff/editable-buffer-list.vim//15018:/bin/bash
+badd +7 Grug\ FAR\ -\ 1:\ it\ says\ edi
+badd +354 test/driver.ex
+badd +0 oil:///home/ydhamija96/Stuff/editable-buffer-list.vim/
+argglobal
+%argdel
+$argadd oil:///home/ydhamija96/Stuff/editable-buffer-list.vim/
+edit test/driver.ex
+let s:save_splitbelow = &splitbelow
+let s:save_splitright = &splitright
+set splitbelow splitright
+wincmd _ | wincmd |
+vsplit
+1wincmd h
+wincmd w
+wincmd _ | wincmd |
+split
+1wincmd k
+wincmd w
+let &splitbelow = s:save_splitbelow
+let &splitright = s:save_splitright
+wincmd t
+let s:save_winminheight = &winminheight
+let s:save_winminwidth = &winminwidth
+set winminheight=0
+set winheight=1
+set winminwidth=0
+set winwidth=1
+exe 'vert 1resize ' . ((&columns * 127 + 127) / 254)
+exe '2resize ' . ((&lines * 32 + 34) / 68)
+exe 'vert 2resize ' . ((&columns * 126 + 127) / 254)
+exe '3resize ' . ((&lines * 33 + 34) / 68)
+exe 'vert 3resize ' . ((&columns * 126 + 127) / 254)
+argglobal
+balt Grug\ FAR\ -\ 1:\ it\ says\ edi
+setlocal foldmethod=expr
+setlocal foldexpr=v:lua.vim.treesitter.foldexpr()
+setlocal foldmarker={{{,}}}
+setlocal foldignore=#
+setlocal foldlevel=99
+setlocal foldminlines=1
+setlocal foldnestmax=20
+setlocal foldenable
+let s:l = 354 - ((35 * winheight(0) + 33) / 66)
+if s:l < 1 | let s:l = 1 | endif
+keepjumps exe s:l
+normal! zt
+keepjumps 354
+normal! 044|
+wincmd w
+argglobal
+enew
+file \[Buffer\ List]
+balt autoload/editableBufferList.vim
+setlocal foldmethod=expr
+setlocal foldexpr=v:lua.vim.treesitter.foldexpr()
+setlocal foldmarker={{{,}}}
+setlocal foldignore=#
+setlocal foldlevel=99
+setlocal foldminlines=1
+setlocal foldnestmax=20
+setlocal foldenable
+wincmd w
+argglobal
+if bufexists(fnamemodify("term://~/Stuff/editable-buffer-list.vim//15018:/bin/bash", ":p")) | buffer term://~/Stuff/editable-buffer-list.vim//15018:/bin/bash | else | edit term://~/Stuff/editable-buffer-list.vim//15018:/bin/bash | endif
+if &buftype ==# 'terminal'
+  silent file term://~/Stuff/editable-buffer-list.vim//15018:/bin/bash
+endif
+setlocal foldmethod=expr
+setlocal foldexpr=v:lua.vim.treesitter.foldexpr()
+setlocal foldmarker={{{,}}}
+setlocal foldignore=#
+setlocal foldlevel=99
+setlocal foldminlines=1
+setlocal foldnestmax=20
+setlocal foldenable
+let s:l = 30 - ((29 * winheight(0) + 16) / 33)
+if s:l < 1 | let s:l = 1 | endif
+keepjumps exe s:l
+normal! zt
+keepjumps 30
+normal! 0
+wincmd w
+2wincmd w
+exe 'vert 1resize ' . ((&columns * 127 + 127) / 254)
+exe '2resize ' . ((&lines * 32 + 34) / 68)
+exe 'vert 2resize ' . ((&columns * 126 + 127) / 254)
+exe '3resize ' . ((&lines * 33 + 34) / 68)
+exe 'vert 3resize ' . ((&columns * 126 + 127) / 254)
+tabnext 1
+if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
+  silent exe 'bwipe ' . s:wipebuf
+endif
+unlet! s:wipebuf
+set winheight=1 winwidth=20
+let &shortmess = s:shortmess_save
+let &winminheight = s:save_winminheight
+let &winminwidth = s:save_winminwidth
+let s:sx = expand("<sfile>:p:r")."x.vim"
+if filereadable(s:sx)
+  exe "source " . fnameescape(s:sx)
+endif
+let &g:so = s:so_save | let &g:siso = s:siso_save
+set hlsearch
+nohlsearch
+doautoall SessionLoadPost
+unlet SessionLoad
+" vim: set ft=vim :

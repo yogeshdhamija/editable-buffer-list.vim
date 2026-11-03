@@ -103,19 +103,19 @@ endif
 " the legend is colored the same as in the list. 'unloaded' is not a
 " character: it is the a/h column left blank.
 let s:flag_meanings = [
-    \ ['u',        'u', 'unlisted',          'bufferListUnlisted'],
-    \ ['%',        '%', 'current',           'bufferListCurrent'],
-    \ ['#',        '#', 'alternate',         'bufferListAlternate'],
-    \ ['a',        'a', 'active',            'bufferListActive'],
-    \ ['h',        'h', 'hidden',            'bufferListActive'],
-    \ ['unloaded', '',  'unloaded',          ''],
-    \ ['-',        '-', 'not modifiable',    'bufferListReadonly'],
-    \ ['=',        '=', 'read-only',         'bufferListReadonly'],
-    \ ['R',        'R', 'running terminal',  'bufferListReadonly'],
-    \ ['F',        'F', 'finished terminal', 'bufferListReadonly'],
-    \ ['?',        '?', 'empty terminal',    'bufferListReadonly'],
-    \ ['+',        '+', 'modified',          'bufferListModified'],
-    \ ['x',        'x', 'read errors',       'bufferListModified'],
+    \ ['u',        'u', 'unlisted',             'bufferListUnlisted'],
+    \ ['%',        '%', 'current',              'bufferListCurrent'],
+    \ ['#',        '#', 'alternate',            'bufferListAlternate'],
+    \ ['a',        'a', 'active',               'bufferListActive'],
+    \ ['h',        'h', 'hidden',               'bufferListActive'],
+    \ ['unloaded', '',  'no a or h = unloaded', ''],
+    \ ['-',        '-', 'not modifiable',       'bufferListReadonly'],
+    \ ['=',        '=', 'read-only',            'bufferListReadonly'],
+    \ ['R',        'R', 'running terminal',     'bufferListReadonly'],
+    \ ['F',        'F', 'finished terminal',    'bufferListReadonly'],
+    \ ['?',        '?', 'empty terminal',       'bufferListReadonly'],
+    \ ['+',        '+', 'modified',             'bufferListModified'],
+    \ ['x',        'x', 'read errors',          'bufferListModified'],
     \ ]
 
 let s:sep = [' · ', 'bufferListHint']
@@ -127,13 +127,13 @@ let s:sep = [' · ', 'bufferListHint']
 " long to read.
 function! s:HintLines(lines, width) abort
     let l:live = [
-        \ [['Buffer List (Updates Live!)', 'bufferListHint'],[':h :BufferList', 'bufferListHintKey']],
+        \ [['see ', 'bufferListHint'],[':h :BufferList', 'bufferListHintKey'],[' -- Updates Live!', 'bufferListHint']],
         \ ]
     let l:delete = get(g:, 'editable_buffer_list_delete_command', 'bdelete')
     let l:keys = [
-        \ [['<CR>', 'bufferListHintKey'], [' = open', 'bufferListHint']],
-        \ [['delete line = ', 'bufferListHint'], [':' . l:delete, 'bufferListHintKey']],
-        \ [['u', 'bufferListHintKey'], [' = undo', 'bufferListHint']],
+        \ [['open -> ', 'bufferListHint'], ['<CR>', 'bufferListHintKey']],
+        \ [[':' . l:delete, 'bufferListHintKey'], [' -> delete line', 'bufferListHint']],
+        \ [['undo -> ', 'bufferListHint'], ['u', 'bufferListHintKey']],
         \ ]
 
     let l:present = {}
