@@ -348,9 +348,9 @@ older builds cannot draw them.
 :BufferList
 :if !g:hints_supported | call Skip('this build cannot draw virtual text above a line, skipping hints') | endif
 :let g:h = join(Hints(), "\n")
-:if g:hints_supported | call Ok(g:h =~# 'Live: edits apply at once', 'it says edits apply without :w') | endif
-:if g:hints_supported | call Ok(g:h =~# '<CR> open', 'the keys are explained') | endif
-:if g:hints_supported | call Ok(g:h =~# 'delete lines to :bdelete', 'naming the delete command') | endif
+:if g:hints_supported | call Ok(g:h =~# 'Updates Live', 'it says edits apply without :w') | endif
+:if g:hints_supported | call Ok(g:h =~# '<CR> = open', 'the keys are explained') | endif
+:if g:hints_supported | call Ok(g:h =~# 'delete line = :bdelete', 'naming the delete command') | endif
 :if g:hints_supported | call Ok(g:h =~# '# alternate', 'b.txt is #, so # is explained') | endif
 :if g:hints_supported | call Ok(g:h =~# 'h hidden', 'a.txt is h, so h is explained') | endif
 :if g:hints_supported | call Ok(g:h =~# '+ modified', 'a.txt is +, so + is explained') | endif

@@ -103,19 +103,19 @@ endif
 " the legend is colored the same as in the list. 'unloaded' is not a
 " character: it is the a/h column left blank.
 let s:flag_meanings = [
-    \ ['u', 'u', 'unlisted', 'bufferListUnlisted'],
-    \ ['%', '%', 'current window', 'bufferListCurrent'],
-    \ ['#', '#', 'alternate', 'bufferListAlternate'],
-    \ ['a', 'a', 'in a window', 'bufferListActive'],
-    \ ['h', 'h', 'hidden', 'bufferListActive'],
-    \ ['unloaded', '', 'no a/h: not loaded', ''],
-    \ ['-', '-', 'not modifiable', 'bufferListReadonly'],
-    \ ['=', '=', 'read-only', 'bufferListReadonly'],
-    \ ['R', 'R', 'terminal, running', 'bufferListReadonly'],
-    \ ['F', 'F', 'terminal, finished', 'bufferListReadonly'],
-    \ ['?', '?', 'terminal, no job', 'bufferListReadonly'],
-    \ ['+', '+', 'modified', 'bufferListModified'],
-    \ ['x', 'x', 'read errors', 'bufferListModified'],
+    \ ['u',        'u', 'unlisted',          'bufferListUnlisted'],
+    \ ['%',        '%', 'current',           'bufferListCurrent'],
+    \ ['#',        '#', 'alternate',         'bufferListAlternate'],
+    \ ['a',        'a', 'active',            'bufferListActive'],
+    \ ['h',        'h', 'hidden',            'bufferListActive'],
+    \ ['unloaded', '',  'unloaded',          ''],
+    \ ['-',        '-', 'not modifiable',    'bufferListReadonly'],
+    \ ['=',        '=', 'read-only',         'bufferListReadonly'],
+    \ ['R',        'R', 'running terminal',  'bufferListReadonly'],
+    \ ['F',        'F', 'finished terminal', 'bufferListReadonly'],
+    \ ['?',        '?', 'empty terminal',    'bufferListReadonly'],
+    \ ['+',        '+', 'modified',          'bufferListModified'],
+    \ ['x',        'x', 'read errors',       'bufferListModified'],
     \ ]
 
 let s:sep = [' · ', 'bufferListHint']
@@ -126,20 +126,14 @@ let s:sep = [' · ', 'bufferListHint']
 " that are there: one entry for every flag that could turn up would be too
 " long to read.
 function! s:HintLines(lines, width) abort
-    " Worth saying because oil.nvim, which this resembles, holds edits until
-    " :w -- someone expecting that would be surprised by an instant :bdelete.
     let l:live = [
-        \ [['Live: edits apply at once', 'bufferListHint']],
-        \ [['no ', 'bufferListHint'], [':w', 'bufferListHintKey'], [' needed', 'bufferListHint']],
-        \ [['keeps itself up to date', 'bufferListHint']],
+        \ [['Buffer List (Updates Live!)', 'bufferListHint'],[':h :BufferList', 'bufferListHintKey']],
         \ ]
     let l:delete = get(g:, 'editable_buffer_list_delete_command', 'bdelete')
     let l:keys = [
-        \ [['<CR>', 'bufferListHintKey'], [' open', 'bufferListHint']],
-        \ [['delete lines to ', 'bufferListHint'], [':' . l:delete, 'bufferListHintKey']],
-        \ [['u', 'bufferListHintKey'], [' undo', 'bufferListHint']],
-        \ [['CTRL-^', 'bufferListHintKey'], [' back', 'bufferListHint']],
-        \ [[':h :BufferList', 'bufferListHintKey']],
+        \ [['<CR>', 'bufferListHintKey'], [' = open', 'bufferListHint']],
+        \ [['delete line = ', 'bufferListHint'], [':' . l:delete, 'bufferListHintKey']],
+        \ [['u', 'bufferListHintKey'], [' = undo', 'bufferListHint']],
         \ ]
 
     let l:present = {}
@@ -158,7 +152,7 @@ function! s:HintLines(lines, width) abort
         if(has_key(l:present, l:key))
             call add(l:legend, empty(l:flag)
                 \ ? [[l:meaning, 'bufferListHint']]
-                \ : [[l:flag, l:group], [' ' . l:meaning, 'bufferListHint']])
+                \ : [[l:flag, l:group], [' = ' . l:meaning, 'bufferListHint']])
         endif
     endfor
 
