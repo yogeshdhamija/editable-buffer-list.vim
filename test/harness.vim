@@ -184,6 +184,22 @@ function! HintLines() abort
     return l:found
 endfunction
 
+" The highlight group of the hint chunk reading exactly a:text, or '' if
+" there is none. Neovim only: in Vim a hint line has the one color.
+function! HintGroup(text) abort
+    let l:ns = nvim_create_namespace('editable-buffer-list')
+    for l:mark in nvim_buf_get_extmarks(0, l:ns, 0, -1, {'details': v:true})
+        for l:chunks in get(l:mark[3], 'virt_lines', [])
+            for l:chunk in l:chunks
+                if(l:chunk[0] ==# a:text)
+                    return l:chunk[1]
+                endif
+            endfor
+        endfor
+    endfor
+    return ''
+endfunction
+
 " What the hints above line 1 say, one string per line.
 function! Hints() abort
     return map(filter(HintLines(), 'v:val[0] == 1'), 'v:val[1]')

@@ -58,13 +58,14 @@ orders all disagree. Every list follows, and each cursor stays on its entry.
 :edit c.txt
 :BufferList
 :call Is(Names(), ['a.txt', 'b.txt', 'c.txt'], 'by name to begin with')
-:if g:hints_supported | call Ok(join(Hints()) =~# 'gs to sort (by name)', 'the hints say so') | endif
+:if g:hints_supported | call Ok(join(Hints()) =~# 'gs to sort: \[name\]/used/created', 'the hints say so') | endif
 :call GotoEntry('b.txt')
 :execute "normal gs"
 :call Is(get(g:, 'editable_buffer_list_sort', ''), 'used', 'gs switched to most recently used')
 :call Is(Names(), ['c.txt', 'b.txt', 'a.txt'], 'c.txt, the buffer the list replaced, first')
 :call Ok(getline('.') =~# 'b\.txt', 'the cursor stayed on b.txt')
-:if g:hints_supported | call Ok(join(Hints()) =~# 'gs to sort (by recently used)', 'the hints follow') | endif
+:if g:hints_supported | call Ok(join(Hints()) =~# 'gs to sort: name/\[used\]/created', 'the hints follow') | endif
+:if has('nvim-0.6') | call Is([HintGroup('[used]'), HintGroup('name')], ['bufferListHintCurrent', 'bufferListHint'], 'the order in effect has a color of its own') | endif
 :execute "normal gs"
 :call Is(g:editable_buffer_list_sort, 'created', 'then to most recently created')
 :call Is(Names(), ['b.txt', 'a.txt', 'c.txt'], 'b.txt, the newest buffer, first')
@@ -741,7 +742,7 @@ window, and laid out again when it is resized.
 :badd c.txt
 :edit b.txt
 :vsplit
-:vertical resize 30
+:vertical resize 32
 :BufferList
 :let g:narrow = Hints()
 :if g:hints_supported | call Ok(len(g:narrow) > 2, 'a narrow window gets more than two lines') | endif

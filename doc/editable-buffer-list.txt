@@ -32,7 +32,8 @@ the list. Only the flags actually in the list are explained, so the legend
 changes as the list does: >
 
   see :h :BufferList | Updates Live!
-  <CR> to open | delete line to :bdelete | u to undo | gs to sort (by name)
+  <CR> to open | delete line to :bdelete | u to undo
+  gs to sort: [name]/used/created
   # = alternate | h = hidden | no a or h = unloaded | + = modified
   ──────────────────────────────────────────────────────────────────────────
     1  h + "init.vim"
@@ -91,9 +92,9 @@ way to leave without picking anything.
 			never used, as after |:badd|, come last.
 	created		most recently created (highest buffer number) first
 
-The hints show the order in effect. It is one setting for every list,
-|g:editable_buffer_list_sort|, which `gs` changes, so every list on screen
-re-sorts. However the lines move, each window's cursor stays on the entry it
+The hints list them all, with the one in effect in brackets. It is one
+setting for every list, |g:editable_buffer_list_sort|, which `gs` changes,
+so every list on screen re-sorts. However the lines move, each window's cursor stays on the entry it
 was on. With "used", a list on screen also re-sorts as buffers are used in
 other windows. Plain `s` would be the key in netrw or bufexplorer, but here
 it is an edit; `gs` is oil.nvim's key for the same thing.
@@ -183,6 +184,8 @@ The colors come from these groups, each linked by default to the one shown
 
 	bufferListHint		the hints			Comment
 	bufferListHintKey	keys and commands in them	Special
+	bufferListHintCurrent	the sort order in effect,	Title
+				in brackets in the hints
 	bufferListNumber	buffer numbers in the list	Comment
 	bufferListUrl		names like "term://..." and	Identifier
 				"oil://...", which are not

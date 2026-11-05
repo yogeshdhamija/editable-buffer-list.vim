@@ -198,6 +198,7 @@ let s:hints_supported = has('nvim-0.6') || (has('textprop') && has('patch-9.0.04
 function! s:DefineHighlights() abort
     highlight default link bufferListHint Comment
     highlight default link bufferListHintKey Special
+    highlight default link bufferListHintCurrent Title
 endfunction
 call s:DefineHighlights()
 
@@ -245,7 +246,7 @@ function! s:HintLines(lines, width) abort
         \ [['<CR>', 'bufferListHintKey'], [' to open', 'bufferListHint']],
         \ [['delete line', 'bufferListHintKey'], [' to :' . l:delete, 'bufferListHint']],
         \ [['u', 'bufferListHintKey'], [' to undo', 'bufferListHint']],
-        \ [['gs', 'bufferListHintKey'], [' to sort (by ' . s:sorts[s:SortIndex()][1] . ')', 'bufferListHint']],
+        \ [['gs', 'bufferListHintKey'], [' to sort: ', 'bufferListHint']] + s:SortChoices(),
         \ ]
 
     let l:present = {}
@@ -277,6 +278,27 @@ function! s:HintLines(lines, width) abort
     let l:rule = &encoding ==# 'utf-8' ? "\u2500" : '-'
     call add(l:hints, [[repeat(l:rule, max([1, a:width / strdisplaywidth(l:rule)])), 'bufferListHint']])
     return l:hints
+endfunction
+
+" Every order gs cycles through, as chunks, the one in effect in brackets:
+" "[name]/used/created". All of them rather than just the current one, so
+" the hint says what gs will do next, and so its width never changes as gs
+" moves through them, which would rewrap the hints. The brackets are what
+" mark it in Vim, where a hint line has only the one color.
+function! s:SortChoices() abort
+    let l:current = s:SortIndex()
+    let l:chunks = []
+    let l:i = 0
+    for [l:name, l:description] in s:sorts
+        if(l:i > 0)
+            call add(l:chunks, ['/', 'bufferListHint'])
+        endif
+        call add(l:chunks, l:i == l:current
+            \ ? ['[' . l:name . ']', 'bufferListHintCurrent']
+            \ : [l:name, 'bufferListHint'])
+        let l:i += 1
+    endfor
+    return l:chunks
 endfunction
 
 " Lays a:items -- each a list of chunks -- out in as few lines as fit
