@@ -24,6 +24,14 @@ syntax match bufferListModified /[+x]/ contained
 
 syntax match bufferListNoName /"\[No Name\]"/
 
+" Names in the form scheme://... -- terminals (term://), and buffers plugins
+" make that are not files (oil://, fugitive://) -- so they stand out from the
+" files around them. The scheme gets a group of its own. Anchored with a
+" lookbehind, for the same reason as above: scanning resumes after the flags,
+" where ^ can no longer match.
+syntax match bufferListUrl /\%(^\s*\d\+.\{5} \)\@<="\a[[:alnum:]+.-]*:\/\/.*"/ contains=bufferListUrlScheme
+syntax match bufferListUrlScheme /"\zs\a[[:alnum:]+.-]*:\/\// contained
+
 " The flags use the same groups fzf.vim uses for the same markers, so the
 " list looks familiar. The buffer numbers are greyed out like the hints, to
 " keep the eye on the names.
@@ -35,5 +43,7 @@ highlight default link bufferListActive Type
 highlight default link bufferListReadonly Constant
 highlight default link bufferListModified Exception
 highlight default link bufferListNoName Comment
+highlight default link bufferListUrl Identifier
+highlight default link bufferListUrlScheme Special
 
 let b:current_syntax = "bufferlist"

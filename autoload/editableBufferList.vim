@@ -13,8 +13,8 @@ let g:autoloaded_editable_buffer_list = 1
 " number is ever read back from the text; everything else is redrawn from
 " reality, so a mangled line is swept away rather than misread.
 "
-" The text itself is :ls output, sorted by name and without the "line N" at
-" the end of each line -- see s:Tidy.
+" The text itself is :ls output, sorted (by name, unless gs picks another
+" order) and without the "line N" at the end of each line -- see s:Tidy.
 
 function! s:Listed() abort
     return sort(map(getbufinfo({'buflisted': 1}), 'v:val["bufnr"]'), 'n')
@@ -51,11 +51,82 @@ function! s:CompareNames(a, b) abort
     return l:a <# l:b ? -1 : 1
 endfunction
 
-" :ls output as the list shows it: in alphabetical order of name, with no
-" line numbers. Only the leading buffer number is ever read back, so the
-" order is free to be anything.
+" Most recently created first. Buffer numbers only ever go up, so the newest
+" buffer has the highest.
+function! s:CompareCreated(a, b) abort
+    return s:ParseBufnr(a:b) - s:ParseBufnr(a:a)
+endfunction
+
+" When each buffer was last used, for the 'used' order: [lastused, leave
+" count], filled in by s:Tidy just before it sorts. Vim and Neovim set
+" 'lastused' when a buffer is left, so the buffer the list replaced is the
+" most recent. It counts whole seconds, though, so buffers left in the same
+" second tie on it; the count, which goes up on every BufLeave, puts those in
+" the order they were really left. It only starts counting once this file is
+" loaded, at the first :BufferList, which is what 'lastused' is there for: it
+" covers everything before that.
+let s:used = {}
+let s:left = {}
+let s:leaves = 0
+
+function! s:NoteLeft(buf) abort
+    let s:leaves += 1
+    let s:left[a:buf] = s:leaves
+endfunction
+
+" Most recently used first. Never-used buffers (:badd) all tie at the
+" bottom, newest first.
+function! s:CompareUsed(a, b) abort
+    let l:a = s:ParseBufnr(a:a)
+    let l:b = s:ParseBufnr(a:b)
+    let l:used_a = get(s:used, l:a, [0, 0])
+    let l:used_b = get(s:used, l:b, [0, 0])
+    if(l:used_a[0] != l:used_b[0])
+        return l:used_b[0] > l:used_a[0] ? 1 : -1
+    elseif(l:used_a[1] != l:used_b[1])
+        return l:used_b[1] > l:used_a[1] ? 1 : -1
+    endif
+    return l:b - l:a
+endfunction
+
+" The orders gs cycles through, as [setting, description].
+let s:sorts = [
+    \ ['name',    'name'],
+    \ ['used',    'recently used'],
+    \ ['created', 'recently created'],
+    \ ]
+
+" Index into s:sorts of the order in effect. Read on every redraw, like the
+" other settings, so that setting it by hand takes effect at the next one. An
+" unknown value is taken as 'name'.
+function! s:SortIndex() abort
+    let l:sort = get(g:, 'editable_buffer_list_sort', 'name')
+    let l:i = 0
+    for [l:name, l:description] in s:sorts
+        if(l:name ==# l:sort)
+            return l:i
+        endif
+        let l:i += 1
+    endfor
+    return 0
+endfunction
+
+" :ls output as the list shows it: in the order g:editable_buffer_list_sort
+" says, with no line numbers. Only the leading buffer number is ever read
+" back, so the order is free to be anything.
 function! s:Tidy(lines) abort
-    return sort(map(a:lines, 's:StripLnum(v:val)'), function('s:CompareNames'))
+    call map(a:lines, 's:StripLnum(v:val)')
+    let l:sort = s:sorts[s:SortIndex()][0]
+    if(l:sort ==# 'used')
+        let s:used = {}
+        for l:info in getbufinfo()
+            let s:used[l:info.bufnr] = [get(l:info, 'lastused', 0), get(s:left, l:info.bufnr, 0)]
+        endfor
+        return sort(a:lines, function('s:CompareUsed'))
+    elseif(l:sort ==# 'created')
+        return sort(a:lines, function('s:CompareCreated'))
+    endif
+    return sort(a:lines, function('s:CompareNames'))
 endfunction
 
 " Where to run :ls for a list. Its own window, because that is what makes the
@@ -170,6 +241,7 @@ function! s:HintLines(lines, width) abort
         \ [['<CR>', 'bufferListHintKey'], [' to open', 'bufferListHint']],
         \ [['delete line', 'bufferListHintKey'], [' to :' . l:delete, 'bufferListHint']],
         \ [['u', 'bufferListHintKey'], [' to undo', 'bufferListHint']],
+        \ [['gs', 'bufferListHintKey'], [' to sort (by ' . s:sorts[s:SortIndex()][1] . ')', 'bufferListHint']],
         \ ]
 
     let l:present = {}
@@ -308,9 +380,40 @@ function! s:CursorRow() abort
     endif
 endfunction
 
-" a:1 is a buffer to leave out even though :ls still reports it -- see the
-" BufDelete autocmd below.
-function! s:Render(list_buf, ...) abort
+" Which entry the cursor is on in each window showing a:list_buf, as {winid:
+" buffer number}. A window whose cursor is on a line with no buffer is left
+" out.
+function! s:CursorEntries(list_buf) abort
+    let l:entries = {}
+    if(!exists('*win_execute'))
+        return l:entries
+    endif
+    for l:winid in win_findbuf(a:list_buf)
+        let l:nr = s:ParseBufnr(get(getbufline(a:list_buf, line('.', l:winid)), 0, ''))
+        if(l:nr)
+            let l:entries[l:winid] = l:nr
+        endif
+    endfor
+    return l:entries
+endfunction
+
+" Puts each window's cursor back on the entry it was on, wherever that entry
+" is now. One that is gone leaves the cursor where it is.
+function! s:RestoreCursorEntries(list_buf, entries) abort
+    let l:lines = getbufline(a:list_buf, 1, '$')
+    for [l:winid, l:nr] in items(a:entries)
+        let l:lnum = match(l:lines, '^\s*' . l:nr . '\>') + 1
+        if(l:lnum && l:lnum != line('.', str2nr(l:winid)))
+            call win_execute(str2nr(l:winid), 'call cursor(' . l:lnum . ', col("."))')
+        endif
+    endfor
+endfunction
+
+" a:skip is a buffer to leave out even though :ls still reports it -- see the
+" BufDelete autocmd below -- or 0. a:own_edit is set when the redraw is
+" s:Apply's, following an edit made in the list itself, and clear for every
+" other one: something changing elsewhere, opening the list, or gs.
+function! s:Render(list_buf, skip, own_edit) abort
     " Jumping to a buffer relists it, so CTRL-O back into the list undoes the
     " 'nobuflisted' it was created with -- and a listed list shows up in its
     " own output, which is exactly what that setting is there to prevent.
@@ -324,19 +427,41 @@ function! s:Render(list_buf, ...) abort
     " :ls leads with a blank line. Left in, it would be a list entry carrying
     " no buffer number, shifting every real entry down one.
     let l:lines = s:Tidy(filter(split(s:Capture(l:winid), "\n"), 'v:val !=# ""'))
-    let l:skip = a:0 ? a:1 : 0
-    if(l:skip)
+    if(a:skip)
         " String concatenation for older Vim, which has no lambdas.
-        call filter(l:lines, 's:ParseBufnr(v:val) != ' . l:skip)
+        call filter(l:lines, 's:ParseBufnr(v:val) != ' . a:skip)
     endif
     if(empty(l:lines))
         let l:lines = ['']
     endif
     let l:old_lines = getbufline(a:list_buf, 1, '$')
     if(l:lines !=# l:old_lines)
+        " Any redraw but s:Apply's is kept out of undo, as oil.nvim does with
+        " its own. As an undo step it would be a trap: undoing it takes the
+        " text back to an older buffer list, which s:Apply then acts on as if
+        " it were an edit. Buffers opened since would be deleted -- all of
+        " them, undoing the list's first draw -- and ones deleted since
+        " brought back. Where only the order or the flags changed, s:Apply
+        " would redraw them as a new change, which u then undoes, and so on:
+        " u would never get past it. 'undolevels' at -1 is what keeps the
+        " change out, and it clears the history too, so u goes back only as
+        " far as the last such redraw. What was before it was out of reach,
+        " or only reachable through one of those traps, anyway.
+        "
+        " And since the lines may have moved, each window's cursor is kept
+        " on the entry it was on, rather than the line number.
+        let l:cursors = a:own_edit ? {} : s:CursorEntries(a:list_buf)
+        if(!a:own_edit)
+            call setbufvar(a:list_buf, '&undolevels', -1)
+        endif
         call setbufline(a:list_buf, 1, l:lines)
         if(len(l:old_lines) > len(l:lines))
             call deletebufline(a:list_buf, len(l:lines) + 1, '$')
+        endif
+        if(!a:own_edit)
+            " Back to following the global value.
+            call setbufvar(a:list_buf, '&undolevels', -123456)
+            call s:RestoreCursorEntries(a:list_buf, l:cursors)
         endif
     endif
     call s:DrawHints(a:list_buf, l:lines, l:winid)
@@ -359,7 +484,7 @@ function! s:UpdateAll(...) abort
     let l:skip = a:0 ? a:1 : 0
     " Find all buffers acting as a buffer list
     for l:list_buf in filter(range(1, bufnr('$')), 'getbufvar(v:val, "&filetype") ==# "bufferlist"')
-        call s:Render(l:list_buf, l:skip)
+        call s:Render(l:list_buf, l:skip, 0)
     endfor
 endfunction
 
@@ -387,6 +512,8 @@ endfunction
 
 augroup EditableBufferListGlobal
     autocmd!
+    " For the 'used' order.
+    autocmd BufLeave * call s:NoteLeft(str2nr(expand('<abuf>')))
     " Trigger background list refresh on all relevant global buffer lifecycle and focus events
     autocmd BufAdd,BufFilePost,BufEnter,BufWritePost * call s:UpdateAll()
     " These two fire *before* the buffer leaves the list, and Vim has no
@@ -465,7 +592,7 @@ function! s:Apply() abort
         undojoin
     catch /E790/
     endtry
-    call s:Render(bufnr('%'))
+    call s:Render(bufnr('%'), 0, 1)
     if(!empty(l:errors))
         echohl WarningMsg
         echomsg join(l:errors, ' | ')
@@ -535,14 +662,37 @@ function! editableBufferList#Open() abort
                 autocmd BufWinEnter <buffer> call s:WindowOptions()
             augroup END
             nnoremap <buffer> <CR> <Cmd>call editableBufferList#OpenUnderCursor()<CR>
+            " oil.nvim's key for the same thing. Plain s, which netrw and
+            " bufexplorer use, is an edit here, and gs (go to sleep) is not.
+            nnoremap <buffer> gs <Cmd>call editableBufferList#CycleSort()<CR>
         endif
     endif
     call s:WindowOptions()
-    call s:Render(bufnr('%'))
+    call s:Render(bufnr('%'), 0, 0)
     " Start on '#', the buffer this window was showing. Line 1 if it is gone.
     call cursor(max([1, match(getline(1, '$'), '^\s*\d\+ #') + 1]), 1)
     call s:RevealHints()
     call s:CursorRow()
+endfunction
+
+" Every list follows, since the setting is global. Each cursor stays on its
+" entry -- see s:Render.
+function! editableBufferList#CycleSort() abort
+    let l:next = s:sorts[(s:SortIndex() + 1) % len(s:sorts)]
+    let g:editable_buffer_list_sort = l:next[0]
+    call s:UpdateAll()
+    echo 'Buffer list sorted by ' . l:next[1]
+endfunction
+
+" The full path of the buffer on the cursor's line, as expand('%:p') would
+" give it in that buffer -- for a mapping or command that copies it. Empty if
+" the line has no buffer, or the buffer has no name.
+function! editableBufferList#PathUnderCursor() abort
+    let l:b = s:ParseBufnr(getline('.'))
+    if(!l:b || !bufexists(l:b) || empty(bufname(l:b)))
+        return ''
+    endif
+    return expand('#' . l:b . ':p')
 endfunction
 
 function! editableBufferList#OpenUnderCursor() abort

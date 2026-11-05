@@ -16,9 +16,10 @@ show up at the next redraw instead: |:bunload|, or a terminal's job
 ending.
 
 The text is |:ls| output -- same columns, same flags -- with two changes:
-the lines are sorted alphabetically by name, ignoring case, and the "line N"
-at the end of each is left off (it is only the cursor line Vim last
-remembered for that buffer, so it is usually out of date). It is produced by
+the lines are sorted, alphabetically by name unless you pick another order
+with `gs` (see |editable-buffer-list-sort|), and the "line N" at the end of
+each is left off (it is only the cursor line Vim last remembered for that
+buffer, so it is usually out of date). It is produced by
 running |:ls| in the list's own window, which is what makes the markers read
 correctly: the list buffer is 'nobuflisted', so it never appears in its own
 output and no line is ever marked `%`. The `#` sits on the buffer the window
@@ -30,9 +31,9 @@ flags in front of each name mean, with a rule underneath to set them off from
 the list. Only the flags actually in the list are explained, so the legend
 changes as the list does: >
 
-  Live: edits apply at once · no :w needed · keeps itself up to date
-  <CR> open · delete lines to :bdelete · u undo · CTRL-^ back · :h :BufferList
-  # alternate · h hidden · no a/h: not loaded · + modified · :h :ls
+  see :h :BufferList | Updates Live!
+  <CR> to open | delete line to :bdelete | u to undo | gs to sort (by name)
+  # = alternate | h = hidden | no a or h = unloaded | + = modified
   ──────────────────────────────────────────────────────────────────────────
     1  h + "init.vim"
     2      "notes.txt"
@@ -57,10 +58,34 @@ command used can be swapped out; see |g:editable_buffer_list_delete_command|.
 undo restores the line, and since |:bdelete| only unlists a buffer rather
 than destroying it, the restored line relists it. `CTRL-R` redoes.
 
+Only your own edits are undone. When the list redraws itself for any other
+reason -- a buffer opened or deleted elsewhere, a flag changing, `gs` -- the
+redraw is not an undo step, and like oil.nvim's redraws it clears the undo
+history: `u` goes back only as far as the last one. Otherwise undoing a
+redraw would take the text back to an older buffer list, and the list would
+act on that as if it were an edit, deleting buffers opened since. If nothing
+changed while you were away, a list you come back to keeps its history.
+
 <CR> opens the buffer under the cursor in this window. The alternate file is
 preserved (|keepalt|), so CTRL-^ afterwards goes to the buffer the window
 showed before the list -- as if the list was never there. That is also the
 way to leave without picking anything.
+
+						*editable-buffer-list-sort*
+`gs` changes the order of the list, cycling through:
+
+	name		alphabetically by name, ignoring case (the default)
+	used		most recently used first: the buffer the list
+			replaced, then the one before it, and so on. Buffers
+			never used, as after |:badd|, come last.
+	created		most recently created (highest buffer number) first
+
+The hints show the order in effect. It is one setting for every list,
+|g:editable_buffer_list_sort|, which `gs` changes, so every list on screen
+re-sorts. However the lines move, each window's cursor stays on the entry it
+was on. With "used", a list on screen also re-sorts as buffers are used in
+other windows. Plain `s` would be the key in netrw or bufexplorer, but here
+it is an edit; `gs` is oil.nvim's key for the same thing.
 
 Buffers with unsaved changes refuse to unload: the line comes back and the
 |E89| message is shown. Save the buffer first, or use `:bdelete!` yourself if
@@ -121,6 +146,28 @@ them off: >
 Like the delete command, it is read on every redraw, so changing it takes
 effect the next time the list is drawn.
 
+						*g:editable_buffer_list_sort*
+The order of the list: "name", "used" or "created", as described at
+|editable-buffer-list-sort|. Defaults to "name". `gs` sets it; set it
+yourself to start with another order: >
+	let g:editable_buffer_list_sort = 'used'
+<
+It is read on every redraw. Anything else is taken as "name".
+
+				      *editableBufferList#PathUnderCursor()*
+editableBufferList#PathUnderCursor()
+		The full path of the buffer on the cursor's line, as
+		`expand('%:p')` would give it in that buffer, for a command or
+		mapping that copies it. A name like "term://..." is given as
+		it is. Empty if the line has no buffer, or the buffer has no
+		name. For example, a `:CP` that works in the list too: >
+	function! CopyPath() abort
+	    let l:path = &filetype ==# 'bufferlist'
+	        \ ? editableBufferList#PathUnderCursor() : expand('%:p')
+	    let @+ = l:path
+	endfunction
+	command! CP call CopyPath()
+<
 				      *editable-buffer-list-highlights*
 The colors come from these groups, each linked by default to the one shown
 (see |highlight-groups|):
@@ -128,6 +175,10 @@ The colors come from these groups, each linked by default to the one shown
 	bufferListHint		the hints			Comment
 	bufferListHintKey	keys and commands in them	Special
 	bufferListNumber	buffer numbers in the list	Comment
+	bufferListUrl		names like "term://..." and	Identifier
+				"oil://...", which are not
+				files
+	bufferListUrlScheme	the "term://" part of those	Special
 
 In Neovim, a flag in the legend is colored like the same flag in the list.
 In Vim, a line of virtual text has only one color, so the hints are all

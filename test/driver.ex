@@ -48,6 +48,71 @@ c, a, B, so the order on screen and the order of the numbers disagree.
 :call Is(Names(), ['a.txt', 'aa.txt', 'B.md', 'c.txt'], 'back in its place')
 
 
+gs cycles the order: by name, most recently used first, most recently
+created first, and back. Created c, a, b, then used c again, the three
+orders all disagree. Every list follows, and each cursor stays on its entry.
+
+:call Describe('gs cycles the sort order')
+:call Reset()
+:edit c.txt
+:edit a.txt
+:edit b.txt
+:edit c.txt
+:BufferList
+:call Is(Names(), ['a.txt', 'b.txt', 'c.txt'], 'by name to begin with')
+:if g:hints_supported | call Ok(join(Hints()) =~# 'gs to sort (by name)', 'the hints say so') | endif
+:call GotoEntry('b.txt')
+:execute "normal gs"
+:call Is(get(g:, 'editable_buffer_list_sort', ''), 'used', 'gs switched to most recently used')
+:call Is(Names(), ['c.txt', 'b.txt', 'a.txt'], 'c.txt, the buffer the list replaced, first')
+:call Ok(getline('.') =~# 'b\.txt', 'the cursor stayed on b.txt')
+:if g:hints_supported | call Ok(join(Hints()) =~# 'gs to sort (by recently used)', 'the hints follow') | endif
+:execute "normal gs"
+:call Is(g:editable_buffer_list_sort, 'created', 'then to most recently created')
+:call Is(Names(), ['b.txt', 'a.txt', 'c.txt'], 'b.txt, the newest buffer, first')
+:call Ok(getline('.') =~# 'b\.txt', 'the cursor still on b.txt')
+:execute "normal gs"
+:call Is(g:editable_buffer_list_sort, 'name', 'and back to by name')
+:call Is(Names(), ['a.txt', 'b.txt', 'c.txt'], 'in name order again')
+:unlet g:editable_buffer_list_sort
+
+:call Describe('the sort order can be set ahead of time')
+:call Reset()
+:let g:editable_buffer_list_sort = 'used'
+:edit a.txt
+:badd z.txt
+:edit c.txt
+:edit b.txt
+:BufferList
+:call Is(Names(), ['b.txt', 'c.txt', 'a.txt', 'z.txt'], 'most recently used first, never-entered z.txt last')
+:call Ok(getline('.') =~# 'b\.txt', 'the cursor starts on #, at the top')
+:let g:editable_buffer_list_sort = 'bogus'
+:BufferList
+:call Is(Names(), ['a.txt', 'b.txt', 'c.txt', 'z.txt'], 'an unknown order means by name')
+:unlet g:editable_buffer_list_sort
+
+With most recently used first, a list on screen reorders as buffers are
+used in other windows, and its cursor stays on its entry.
+
+:call Describe('the most recently used order follows other windows')
+:call Reset()
+:let g:editable_buffer_list_sort = 'used'
+:edit a.txt
+:edit b.txt
+:edit c.txt
+:BufferList
+:let g:list = bufnr('%')
+:let g:listwin = win_getid()
+:call GotoEntry('b.txt')
+:split
+:edit a.txt
+:edit c.txt
+:call Is(map(getbufline(g:list, 1, '$'), 'matchstr(v:val, ''"\zs.*\ze"'')'), ['a.txt', 'c.txt', 'b.txt'], 'a.txt, just left, is first')
+:call Ok(getbufline(g:list, line('.', g:listwin))[0] =~# 'b\.txt', 'the list cursor stayed on b.txt')
+:only
+:unlet g:editable_buffer_list_sort
+
+
 <CR> opens the entry under the cursor, in the same window.
 
 :call Describe('<CR> opens the entry under the cursor')
@@ -60,6 +125,24 @@ c, a, B, so the order on screen and the order of the numbers disagree.
 :call Is(bufname('%'), 'a.txt', '<CR> switched this window to a.txt')
 :call Is(winnr('$'), 1, 'still one window')
 :call Is(bufname('#'), 'b.txt', 'keepalt kept # on the pre-list buffer')
+
+
+editableBufferList#PathUnderCursor() is for a "copy path" command: the
+path of the entry under the cursor, as expand('%:p') would give it there.
+
+:call Describe('the path of the entry under the cursor')
+:call Reset()
+:enew
+:call setline(1, 'unsaved, so it stays')
+:badd a.txt
+:badd foo://bar/baz
+:BufferList
+:call GotoEntry('a.txt')
+:call Is(editableBufferList#PathUnderCursor(), fnamemodify('a.txt', ':p'), 'a file gives its full path')
+:call GotoEntry('foo://bar/baz')
+:call Is(editableBufferList#PathUnderCursor(), 'foo://bar/baz', 'a scheme:// name is given as it is')
+:call GotoEntry('[No Name]')
+:call Is(editableBufferList#PathUnderCursor(), '', 'a buffer with no name gives nothing')
 
 
 Navigating away and coming back with CTRL-O. This is why the list buffer is
@@ -122,6 +205,35 @@ Deleting a line unloads that buffer and only that buffer; u brings it back.
 :call Ok(LineOf('b.txt') > 0, 'and its line is back in the list')
 :call Is(buflisted(bufnr('a.txt')), 1, 'a.txt still listed')
 :call Is(buflisted(bufnr('c.txt')), 1, 'c.txt still listed')
+
+
+u undoes edits made in the list, and nothing else: a redraw is not an undo
+step. Undoing one would take the text back to an older buffer list, and the
+plugin would act on that as if it were an edit.
+
+:call Describe('u does not undo the list drawing itself')
+:call Reset()
+:edit a.txt
+:edit b.txt
+:BufferList
+:call Sync()
+:execute "normal! u"
+:call Is(Names(), ['a.txt', 'b.txt'], 'u right after opening leaves the list as it was')
+:call Is(buflisted(bufnr('a.txt')) + buflisted(bufnr('b.txt')), 2, 'and every buffer listed')
+:badd c.txt
+:call Sync()
+:execute "normal! u"
+:call Is(buflisted(bufnr('c.txt')), 1, 'u after c.txt was opened elsewhere does not delete it')
+:call GotoEntry('c.txt')
+:call Sync()
+:execute "normal! dd"
+:execute "normal gs"
+:call Is(Names(), ['b.txt', 'a.txt'], 'gs put b.txt, the buffer the list replaced, first')
+:call Sync()
+:execute "normal! u"
+:call Is(Names(), ['b.txt', 'a.txt'], 'u after gs leaves the new order alone')
+:call Is(buflisted(bufnr('a.txt')) + buflisted(bufnr('b.txt')), 2, 'and the buffers too')
+:unlet g:editable_buffer_list_sort
 
 
 Anything that removes text works, not just dd.
@@ -585,5 +697,25 @@ window is scrolled up into them, which the plugin has to do itself.
 :call Ok(line('w0') > 1, 'G scrolled the long list off its top')
 :execute "normal! gg"
 :if g:nvim | call Is(winsaveview().topfill, len(Hints()), 'and gg shows them again') | endif
+
+
+Names in the form scheme://... -- terminals, and buffers other plugins
+make -- are highlighted, so they stand out from files. Last, because it
+turns syntax highlighting on.
+
+:call Describe('scheme:// names are highlighted')
+:call Reset()
+:syntax enable
+:badd foo://bar/baz
+:badd a.txt
+:BufferList
+:let g:url = LineOf('foo://bar/baz')
+:let g:col = stridx(getline(g:url), '"foo') + 2
+:call Is(synIDattr(synID(g:url, g:col, 1), 'name'), 'bufferListUrlScheme', 'the scheme has its own group')
+:call Is(synIDattr(synID(g:url, g:col + 6, 1), 'name'), 'bufferListUrl', 'and the rest of the name is highlighted')
+:call Is(synIDattr(synID(g:url, 3, 1), 'name'), 'bufferListNumber', 'the number and flags still are too')
+:let g:file = LineOf('a.txt')
+:call Is(synIDattr(synID(g:file, stridx(getline(g:file), '"a') + 2, 1), 'name'), '', 'a file name is left alone')
+:syntax off
 
 :call Finish()
