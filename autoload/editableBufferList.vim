@@ -7,11 +7,15 @@ endif
 let g:autoloaded_editable_buffer_list = 1
 
 " The list is a plain modifiable scratch buffer, so anything that edits text
-" works on it: dd, d2j, Vd, :g/foo/d, u. After every change the visible lines
+" works on it: dd, d2j, Vd, :g/foo/d, p. After every change the visible lines
 " are diffed against the real buffer list -- a line that disappeared unloads
-" its buffer, a line that came back (undo) relists it. Only the leading buffer
-" number is ever read back from the text; everything else is redrawn from
-" reality, so a mangled line is swept away rather than misread.
+" its buffer, a line that appeared relists it. Only the leading buffer number
+" is ever read back from the text; everything else is redrawn from reality,
+" so a mangled line is swept away rather than misread.
+"
+" Undo is the plugin's own, not Vim's: a history of which buffers each edit
+" unlisted and relisted, which u and CTRL-R step back and forth through. See
+" s:undo.
 "
 " The text itself is :ls output, sorted (by name, unless gs picks another
 " order) and without the "line N" at the end of each line -- see s:Tidy.
@@ -410,10 +414,8 @@ function! s:RestoreCursorEntries(list_buf, entries) abort
 endfunction
 
 " a:skip is a buffer to leave out even though :ls still reports it -- see the
-" BufDelete autocmd below -- or 0. a:own_edit is set when the redraw is
-" s:Apply's, following an edit made in the list itself, and clear for every
-" other one: something changing elsewhere, opening the list, or gs.
-function! s:Render(list_buf, skip, own_edit) abort
+" BufDelete autocmd below -- or 0.
+function! s:Render(list_buf, skip) abort
     " Jumping to a buffer relists it, so CTRL-O back into the list undoes the
     " 'nobuflisted' it was created with -- and a listed list shows up in its
     " own output, which is exactly what that setting is there to prevent.
@@ -436,33 +438,14 @@ function! s:Render(list_buf, skip, own_edit) abort
     endif
     let l:old_lines = getbufline(a:list_buf, 1, '$')
     if(l:lines !=# l:old_lines)
-        " Any redraw but s:Apply's is kept out of undo, as oil.nvim does with
-        " its own. As an undo step it would be a trap: undoing it takes the
-        " text back to an older buffer list, which s:Apply then acts on as if
-        " it were an edit. Buffers opened since would be deleted -- all of
-        " them, undoing the list's first draw -- and ones deleted since
-        " brought back. Where only the order or the flags changed, s:Apply
-        " would redraw them as a new change, which u then undoes, and so on:
-        " u would never get past it. 'undolevels' at -1 is what keeps the
-        " change out, and it clears the history too, so u goes back only as
-        " far as the last such redraw. What was before it was out of reach,
-        " or only reachable through one of those traps, anyway.
-        "
-        " And since the lines may have moved, each window's cursor is kept
-        " on the entry it was on, rather than the line number.
-        let l:cursors = a:own_edit ? {} : s:CursorEntries(a:list_buf)
-        if(!a:own_edit)
-            call setbufvar(a:list_buf, '&undolevels', -1)
-        endif
+        " The lines may have moved, so each window's cursor is kept on the
+        " entry it was on, rather than the line number.
+        let l:cursors = s:CursorEntries(a:list_buf)
         call setbufline(a:list_buf, 1, l:lines)
         if(len(l:old_lines) > len(l:lines))
             call deletebufline(a:list_buf, len(l:lines) + 1, '$')
         endif
-        if(!a:own_edit)
-            " Back to following the global value.
-            call setbufvar(a:list_buf, '&undolevels', -123456)
-            call s:RestoreCursorEntries(a:list_buf, l:cursors)
-        endif
+        call s:RestoreCursorEntries(a:list_buf, l:cursors)
     endif
     call s:DrawHints(a:list_buf, l:lines, l:winid)
     " The hints may have just been turned on or off.
@@ -484,7 +467,7 @@ function! s:UpdateAll(...) abort
     let l:skip = a:0 ? a:1 : 0
     " Find all buffers acting as a buffer list
     for l:list_buf in filter(range(1, bufnr('$')), 'getbufvar(v:val, "&filetype") ==# "bufferlist"')
-        call s:Render(l:list_buf, l:skip, 0)
+        call s:Render(l:list_buf, l:skip)
     endfor
 endfunction
 
@@ -523,6 +506,7 @@ augroup EditableBufferListGlobal
     " only fires once the delete is actually going through, so a refused
     " :bdelete never reaches this and never hides a line that is staying.
     autocmd BufDelete,BufWipeout * call s:UpdateAll(str2nr(expand('<abuf>')))
+    autocmd BufWipeout * call s:Forget(str2nr(expand('<abuf>')))
     " For the '+' flag: editing a buffer in another window fires none of the
     " above. Neovim has an event for 'modified' changing; Vim does not, so it
     " has to look after every change.
@@ -541,6 +525,100 @@ augroup EditableBufferListGlobal
     endif
 augroup END
 
+" The undo history, shared by every list: the changes made from lists,
+" oldest first, each as {'unlisted': [buffer numbers], 'relisted': [buffer
+" numbers]}. u takes the last one off s:undo and does the opposite --
+" relists what it unlisted, unlists what it relisted -- and moves it to
+" s:redo. CTRL-R does it again, and moves it back.
+"
+" Vim's own undo is off in the list ('undolevels' -1). It works on text, and
+" the text is a poor record of the buffer list: the list redraws itself
+" whenever anything changes, and every redraw would be an undo step too.
+" Undoing one takes the text back to an older buffer list, which s:Apply
+" would then act on as if it were an edit -- deleting the buffers opened
+" since, or every buffer, undoing the list's first draw. And undoing a delete
+" does not quite put things back: the buffer returns unloaded, so its
+" restored line is wrong about that, and the redraw fixing it would be the
+" next thing u undid. Kept as buffers rather than text, the history needs
+" none of that handled, and nothing done to the text can lose it.
+let s:undo = []
+let s:redo = []
+
+" Unlists the buffers in a:unlist with the delete command, and relists those
+" in a:relist, leaving any that already are. Returns what actually changed --
+" a delete can be refused -- in the form the history keeps, plus the errors
+" the delete command raised, as 'errors'.
+function! s:Change(unlist, relist) abort
+    " Looked up every time rather than once at load, so setting it after the
+    " plugin has loaded still takes effect.
+    let l:delete = get(g:, 'editable_buffer_list_delete_command', 'bdelete')
+    let l:done = {'unlisted': [], 'relisted': [], 'errors': []}
+    " The lists are redrawn once at the end, rather than after every buffer.
+    let g:editable_buffer_list_applying = 1
+    try
+        for l:b in a:unlist
+            if(buflisted(l:b))
+                try
+                    execute l:delete l:b
+                catch
+                    call add(l:done.errors, matchstr(v:exception, 'E\d\+.*'))
+                endtry
+                " A buffer the command wiped cannot be brought back, so it
+                " is not recorded.
+                if(bufexists(l:b) && !buflisted(l:b))
+                    call add(l:done.unlisted, l:b)
+                endif
+            endif
+        endfor
+        " :bdelete only unlists a buffer -- it still exists -- which is what
+        " lets this bring it back. A configured delete command has to leave
+        " buffers existing for the same reason.
+        for l:b in a:relist
+            if(bufexists(l:b) && !buflisted(l:b))
+                call setbufvar(l:b, '&buflisted', 1)
+                call add(l:done.relisted, l:b)
+            endif
+        endfor
+    finally
+        let g:editable_buffer_list_applying = 0
+    endtry
+    return l:done
+endfunction
+
+" Adds a change made from a list to the history. Like any new change, it
+" starts a new future: nothing undone before it can be redone after it.
+function! s:Record(change) abort
+    if(empty(a:change.unlisted) && empty(a:change.relisted))
+        return
+    endif
+    call add(s:undo, {'unlisted': a:change.unlisted, 'relisted': a:change.relisted})
+    let s:redo = []
+    " As many as Vim would keep.
+    if(len(s:undo) > max([1, &g:undolevels]))
+        call remove(s:undo, 0)
+    endif
+endfunction
+
+" A wiped buffer cannot come back, so it is dropped from the history, and a
+" change left with nothing in it goes too: u skips straight past it.
+function! s:Forget(buf) abort
+    for l:history in [s:undo, s:redo]
+        for l:change in l:history
+            call filter(l:change.unlisted, 'v:val != ' . a:buf)
+            call filter(l:change.relisted, 'v:val != ' . a:buf)
+        endfor
+        call filter(l:history, '!empty(v:val.unlisted) || !empty(v:val.relisted)')
+    endfor
+endfunction
+
+function! s:Warn(errors) abort
+    if(!empty(a:errors))
+        echohl WarningMsg
+        echomsg join(a:errors, ' | ')
+        echohl None
+    endif
+endfunction
+
 function! s:Apply() abort
     let l:visible = {}
     for l:line in getline(1, '$')
@@ -549,55 +627,76 @@ function! s:Apply() abort
             let l:visible[l:nr] = 1
         endif
     endfor
-
-    let l:errors = []
-    " Looked up on every apply rather than once at load, so setting it after
-    " the plugin has loaded still takes effect.
-    let l:delete = get(g:, 'editable_buffer_list_delete_command', 'bdelete')
-
-    " Pause auto-updates while manually applying changes from inside the list
-    let g:editable_buffer_list_applying = 1
-    for l:b in s:Listed()
-        if(!has_key(l:visible, l:b))
-            try
-                execute l:delete l:b
-            catch
-                call add(l:errors, matchstr(v:exception, 'E\d\+.*'))
-            endtry
-        endif
-    endfor
-
-    " This is what makes plain u work without a separate undo stack: undo
-    " brings the deleted line back, and since :bdelete only unlists (the
-    " buffer still exists), relisting it restores the entry. A configured
-    " delete command has to leave buffers existing for the same reason.
-    for l:nr in keys(l:visible)
-        let l:b = str2nr(l:nr)
-        if(bufexists(l:b) && !buflisted(l:b))
-            call setbufvar(l:b, '&buflisted', 1)
-        endif
-    endfor
-    let g:editable_buffer_list_applying = 0
-
+    let l:change = s:Change(filter(s:Listed(), '!has_key(l:visible, v:val)'),
+        \ map(keys(l:visible), 'str2nr(v:val)'))
+    call s:Record(l:change)
     " Redraw from reality. This converges: the redraw fires one more
     " TextChanged, which then finds text and reality already agreeing. It is
-    " also what puts a line back when its buffer refused to unload.
-    "
-    " A delete command that moves into other windows (vim-bbye's does, to
-    " switch them off the buffer) ends the undo block the edit was in, which
-    " would make this redraw an undo step of its own: u would then undo the
-    " redraw rather than the edit. undojoin folds it back in. It is refused
-    " right after an undo or redo, which have no edit to fold it into anyway.
-    try
-        undojoin
-    catch /E790/
-    endtry
-    call s:Render(bufnr('%'), 0, 1)
-    if(!empty(l:errors))
-        echohl WarningMsg
-        echomsg join(l:errors, ' | ')
-        echohl None
+    " also what puts a line back when its buffer refused to unload. Every
+    " list, not just this one: they all show the same buffers.
+    call s:UpdateAll()
+    call s:Warn(l:change.errors)
+endfunction
+
+" Moves up to a:count changes from a:from to a:to, undoing them if a:undo is
+" set and redoing them otherwise. a:none is what to say when a:from is empty.
+function! s:Step(from, to, count, undo, none) abort
+    if(empty(a:from))
+        echo a:none
+        return
     endif
+    let l:back = []
+    let l:gone = []
+    let l:errors = []
+    let l:i = 0
+    while(l:i < a:count && !empty(a:from))
+        let l:change = remove(a:from, -1)
+        let l:done = a:undo
+            \ ? s:Change(l:change.relisted, l:change.unlisted)
+            \ : s:Change(l:change.unlisted, l:change.relisted)
+        call extend(l:back, l:done.relisted)
+        call extend(l:gone, l:done.unlisted)
+        call extend(l:errors, l:done.errors)
+        call add(a:to, l:change)
+        let l:i += 1
+    endwhile
+    call s:UpdateAll()
+
+    " Onto the topmost buffer that came back, as Vim's undo puts the cursor
+    " on the topmost line it changed.
+    let l:lines = getline(1, '$')
+    let l:top = 0
+    for l:b in l:back
+        let l:lnum = match(l:lines, '^\s*' . l:b . '\>') + 1
+        if(l:lnum && (!l:top || l:lnum < l:top))
+            let l:top = l:lnum
+        endif
+    endfor
+    if(l:top)
+        call cursor(l:top, 1)
+    endif
+
+    if(!empty(l:errors))
+        call s:Warn(l:errors)
+        return
+    endif
+    let l:said = []
+    for [l:verb, l:bufs] in [['relisted', l:back], ['deleted', l:gone]]
+        if(!empty(l:bufs))
+            call add(l:said, l:verb . ' ' . len(l:bufs) . (len(l:bufs) == 1 ? ' buffer' : ' buffers'))
+        endif
+    endfor
+    if(!empty(l:said))
+        echo (a:undo ? 'Undo: ' : 'Redo: ') . join(l:said, ', ')
+    endif
+endfunction
+
+function! editableBufferList#Undo(count) abort
+    call s:Step(s:undo, s:redo, a:count, 1, 'Already at oldest change')
+endfunction
+
+function! editableBufferList#Redo(count) abort
+    call s:Step(s:redo, s:undo, a:count, 0, 'Already at newest change')
 endfunction
 
 " 'cursorline' on, and highlighting the row and not just the line number.
@@ -647,6 +746,8 @@ function! editableBufferList#Open() abort
             " the :bnext rotation, and :mksession would write a `badd
             " [Buffer List]` that restores as a bogus empty file.
             setlocal buftype=nofile bufhidden=hide noswapfile nobuflisted
+            " Vim's undo is replaced by the list's own -- see s:undo.
+            setlocal undolevels=-1
             " Purely cosmetic (statusline); harmless to skip if the name is
             " taken because another list window is open.
             silent! execute 'file' fnameescape('[Buffer List]')
@@ -665,10 +766,12 @@ function! editableBufferList#Open() abort
             " oil.nvim's key for the same thing. Plain s, which netrw and
             " bufexplorer use, is an edit here, and gs (go to sleep) is not.
             nnoremap <buffer> gs <Cmd>call editableBufferList#CycleSort()<CR>
+            nnoremap <buffer> u <Cmd>call editableBufferList#Undo(v:count1)<CR>
+            nnoremap <buffer> <C-R> <Cmd>call editableBufferList#Redo(v:count1)<CR>
         endif
     endif
     call s:WindowOptions()
-    call s:Render(bufnr('%'), 0, 0)
+    call s:Render(bufnr('%'), 0)
     " Start on '#', the buffer this window was showing. Line 1 if it is gone.
     call cursor(max([1, match(getline(1, '$'), '^\s*\d\+ #') + 1]), 1)
     call s:RevealHints()

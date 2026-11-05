@@ -54,17 +54,28 @@ list is a real modifiable buffer, anything that removes text works: `dd`,
 `5dd`, `d2j`, `dG`, `Vd`, `:g/foo/d`. Nothing is remapped for this. The
 command used can be swapped out; see |g:editable_buffer_list_delete_command|.
 
-`u` brings an unloaded buffer back. This falls out of how the sync works:
-undo restores the line, and since |:bdelete| only unlists a buffer rather
-than destroying it, the restored line relists it. `CTRL-R` redoes.
+Putting a line back relists its buffer: `p` after `dd`, or a line pasted from
+another list. So does writing a bare buffer number on a line of its own.
+					*editable-buffer-list-undo*
+`u` undoes your last change to the buffer list, and `CTRL-R` redoes it. Both
+take a count, and go as far back and forth as you like: `dd` four times, then
+`u` four times, brings all four buffers back. A change is whatever one edit
+did -- the buffers a `dd` or `:g/foo/d` unloaded, or a `p` relisted -- and
+undoing it does the opposite. Since |:bdelete| only unlists a buffer rather
+than destroying it, a deleted buffer can be relisted; it comes back unloaded,
+as after |:badd|. Windows |:bdelete| closed stay closed. The cursor lands on
+the topmost buffer that came back.
 
-Only your own edits are undone. When the list redraws itself for any other
-reason -- a buffer opened or deleted elsewhere, a flag changing, `gs` -- the
-redraw is not an undo step, and like oil.nvim's redraws it clears the undo
-history: `u` goes back only as far as the last one. Otherwise undoing a
-redraw would take the text back to an older buffer list, and the list would
-act on that as if it were an edit, deleting buffers opened since. If nothing
-changed while you were away, a list you come back to keeps its history.
+This is the plugin's own undo, not Vim's: `u` and `CTRL-R` are mapped in the
+list, and Vim's undo is off there ('undolevels' -1), so `U`, `g-`, `g+`,
+|:undo| and |:earlier| do nothing. The history is kept as buffers rather than
+text, so the list redrawing itself never touches it: it survives `gs`,
+buffers opened or deleted elsewhere, and leaving the list and coming back.
+And it holds only changes made from a list: `u` never undoes anything done
+elsewhere. There is one history, shared by every list: `u` in one undoes a
+change made in another. A buffer wiped since (|:bwipeout|) cannot come back,
+so it drops out of the history. The history keeps as many changes as
+'undolevels' says (its global value), and lasts until Vim exits.
 
 <CR> opens the buffer under the cursor in this window. The alternate file is
 preserved (|keepalt|), so CTRL-^ afterwards goes to the buffer the window
@@ -94,9 +105,7 @@ you mean to discard the changes. The same happens for anything else
 
 Only the leading buffer number on each line is ever read back; the rest of
 the line is redrawn from the real buffer list after every change. So mangling
-a line's text cannot corrupt anything -- the line is simply redrawn. A
-side effect: writing a bare buffer number on its own line relists that
-buffer, if it exists.
+a line's text cannot corrupt anything -- the line is simply redrawn.
 
 Navigating away from the list leaves it in the |jumplist|, so CTRL-O comes
 back to it. It is redrawn on arrival, so a list returned to this way shows the

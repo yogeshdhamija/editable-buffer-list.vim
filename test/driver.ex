@@ -38,12 +38,10 @@ c, a, B, so the order on screen and the order of the numbers disagree.
 :badd aa.txt
 :call Is(Names(), ['a.txt', 'aa.txt', 'B.md', 'c.txt'], 'a buffer added later is drawn in its place')
 :call GotoEntry('B.md')
-:call Sync()
 :execute "normal! dd"
 :call Is(buflisted(bufnr('B.md')), 0, 'dd unloaded B.md, the buffer on that line')
 :call Is(Names(), ['a.txt', 'aa.txt', 'c.txt'], 'and nothing else')
-:call Sync()
-:execute "normal! u"
+:execute "normal u"
 :call Is(buflisted(bufnr('B.md')), 1, 'u relisted it')
 :call Is(Names(), ['a.txt', 'aa.txt', 'B.md', 'c.txt'], 'back in its place')
 
@@ -189,7 +187,6 @@ Deleting a line unloads that buffer and only that buffer; u brings it back.
 :BufferList
 :let g:b = bufnr('b.txt')
 :call GotoEntry('b.txt')
-:call Sync()
 :execute "normal! dd"
 :call Is(buflisted(g:b), 0, 'b.txt was unloaded')
 :call Is(buflisted(bufnr('a.txt')), 1, 'a.txt was left alone')
@@ -199,41 +196,131 @@ Deleting a line unloads that buffer and only that buffer; u brings it back.
 
 :call Describe('u brings the buffer back')
 :call Is(&modifiable, 1, 'the list is still modifiable')
-:call Sync()
-:execute "normal! u"
+:execute "normal u"
 :call Is(buflisted(g:b), 1, 'u relisted b.txt')
 :call Ok(LineOf('b.txt') > 0, 'and its line is back in the list')
+:call Ok(getline('.') =~# 'b\.txt', 'with the cursor on it')
 :call Is(buflisted(bufnr('a.txt')), 1, 'a.txt still listed')
 :call Is(buflisted(bufnr('c.txt')), 1, 'c.txt still listed')
+:execute "normal \<C-R>"
+:call Is(buflisted(g:b), 0, 'CTRL-R unloaded it again')
+:call Is(LineOf('b.txt'), 0, 'and took its line away')
 
 
-u undoes edits made in the list, and nothing else: a redraw is not an undo
-step. Undoing one would take the text back to an older buffer list, and the
-plugin would act on that as if it were an edit.
+u and CTRL-R step through a history of which buffers each edit unlisted and
+relisted, which the plugin keeps itself: Vim's own undo is off in the list.
+So they go back and forth as far as there is history, and the list is
+redrawn from reality each time.
 
-:call Describe('u does not undo the list drawing itself')
+:call Describe('dd four times, then u four times')
+:call Reset()
+:edit a.txt
+:edit b.txt
+:edit c.txt
+:edit d.txt
+:edit e.txt
+:BufferList
+:call Is(&l:undolevels, -1, "Vim's own undo is off in the list")
+:execute "normal! ggdd"
+:execute "normal! dd"
+:execute "normal! dd"
+:execute "normal! dd"
+:call Is(Names(), ['e.txt'], 'four dd deleted a.txt to d.txt')
+:execute "normal u"
+:execute "normal u"
+:call Is(Names(), ['c.txt', 'd.txt', 'e.txt'], 'two u brought back d.txt and c.txt')
+:execute "normal u"
+:execute "normal u"
+:call Is(Names(), ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt'], 'four brought back all four')
+:call Is(len(getbufinfo({'buflisted': 1})), 5, 'all five really are listed')
+:call Ok(getline(LineOf('a.txt')) =~# '^\s*\d\+\s\+"', 'and shown as they are now, not loaded')
+:execute "normal u"
+:call Is(len(getbufinfo({'buflisted': 1})), 5, 'a fifth u has nothing left to undo')
+:execute "normal 2\<C-R>"
+:call Is(Names(), ['c.txt', 'd.txt', 'e.txt'], '2 CTRL-R deleted a.txt and b.txt again')
+:execute "normal 2u"
+:call Is(Names(), ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt'], 'and 2u brought them back')
+:call GotoEntry('e.txt')
+:execute "normal! dd"
+:execute "normal \<C-R>"
+:call Is(Names(), ['a.txt', 'b.txt', 'c.txt', 'd.txt'], 'a new edit leaves nothing to redo')
+
+The history is of buffers, not of the list's text, so the list redrawing
+itself -- for gs, for a buffer opened elsewhere, for being opened again --
+leaves it alone. And u undoes only what was done from a list.
+
+:call Describe('the history survives the list redrawing itself')
 :call Reset()
 :edit a.txt
 :edit b.txt
 :BufferList
-:call Sync()
-:execute "normal! u"
-:call Is(Names(), ['a.txt', 'b.txt'], 'u right after opening leaves the list as it was')
-:call Is(buflisted(bufnr('a.txt')) + buflisted(bufnr('b.txt')), 2, 'and every buffer listed')
-:badd c.txt
-:call Sync()
-:execute "normal! u"
-:call Is(buflisted(bufnr('c.txt')), 1, 'u after c.txt was opened elsewhere does not delete it')
-:call GotoEntry('c.txt')
-:call Sync()
+:execute "normal u"
+:call Is(Names(), ['a.txt', 'b.txt'], 'u with nothing to undo changes nothing')
+:call GotoEntry('a.txt')
 :execute "normal! dd"
+:badd c.txt
 :execute "normal gs"
-:call Is(Names(), ['b.txt', 'a.txt'], 'gs put b.txt, the buffer the list replaced, first')
-:call Sync()
-:execute "normal! u"
-:call Is(Names(), ['b.txt', 'a.txt'], 'u after gs leaves the new order alone')
-:call Is(buflisted(bufnr('a.txt')) + buflisted(bufnr('b.txt')), 2, 'and the buffers too')
+:edit c.txt
+:BufferList
+:call Is(Names(), ['c.txt', 'b.txt'], 'c.txt opened, the list re-sorted and reopened')
+:execute "normal u"
+:call Is(buflisted(bufnr('a.txt')), 1, 'u still brings a.txt back')
+:call Is(buflisted(bufnr('c.txt')), 1, 'and leaves c.txt, opened elsewhere, alone')
+:call Ok(getline('.') =~# 'a\.txt', 'with the cursor on a.txt')
 :unlet g:editable_buffer_list_sort
+
+Putting a deleted line back relists its buffer. That is an edit like any
+other, so u undoes it.
+
+:call Describe('p relists, and u undoes that too')
+:call Reset()
+:edit a.txt
+:edit b.txt
+:BufferList
+:call GotoEntry('a.txt')
+:execute "normal! dd"
+:call Is(buflisted(bufnr('a.txt')), 0, 'dd unloaded a.txt')
+:execute "normal! p"
+:call Is(buflisted(bufnr('a.txt')), 1, 'p put its line back, relisting it')
+:execute "normal u"
+:call Is(buflisted(bufnr('a.txt')), 0, 'u undid the p')
+:execute "normal u"
+:call Is(buflisted(bufnr('a.txt')), 1, 'and u again, the dd')
+
+:call Describe('every list shares the one history')
+:call Reset()
+:edit a.txt
+:BufferList
+:let g:l1 = win_getid()
+:let g:list = bufnr('%')
+:vsplit
+:edit b.txt
+:BufferList
+:call GotoEntry('a.txt')
+:execute "normal! dd"
+:call Ok(!HasEntry(g:list, 'a.txt'), 'the other list dropped a.txt too, at once')
+:call win_gotoid(g:l1)
+:execute "normal u"
+:call Is(buflisted(bufnr('a.txt')), 1, 'and u there brought it back')
+:only
+
+A wiped buffer cannot come back, so it drops out of the history.
+
+:call Describe('wiped buffers drop out of the history')
+:call Reset()
+:edit a.txt
+:edit b.txt
+:edit c.txt
+:BufferList
+:let g:b = bufnr('b.txt')
+:call GotoEntry('a.txt')
+:execute "normal! dd"
+:call GotoEntry('b.txt')
+:execute "normal! dd"
+:execute 'bwipeout' g:b
+:execute "normal u"
+:call Is(buflisted(bufnr('a.txt')), 1, 'one u skipped the wiped b.txt and brought back a.txt')
+:call Is(Names(), ['a.txt', 'c.txt'], 'and nothing else')
 
 
 Anything that removes text works, not just dd.
@@ -245,7 +332,6 @@ Anything that removes text works, not just dd.
 :edit c.txt
 :BufferList
 :call GotoEntry('a.txt')
-:call Sync()
 :execute "normal! 2dd"
 :call Is(buflisted(bufnr('a.txt')), 0, '2dd unloaded a.txt')
 :call Is(buflisted(bufnr('b.txt')), 0, '2dd unloaded b.txt')
@@ -257,7 +343,6 @@ Anything that removes text works, not just dd.
 :edit b.txt
 :edit c.txt
 :BufferList
-:call Sync()
 :g/b\.txt/d
 :call Is(buflisted(bufnr('b.txt')), 0, ':g/b.txt/d unloaded b.txt')
 :call Is(buflisted(bufnr('a.txt')), 1, 'a.txt untouched')
@@ -275,7 +360,6 @@ A buffer that refuses to unload keeps its line.
 :let g:b = bufnr('b.txt')
 :call Is(getbufvar(g:b, '&modified'), 1, 'b.txt really is modified')
 :call GotoEntry('b.txt')
-:call Sync()
 :execute "normal! dd"
 :call Is(buflisted(g:b), 1, 'modified b.txt is still listed')
 :call Ok(LineOf('b.txt') > 0, 'its line came back in the list')
@@ -296,7 +380,6 @@ failed lookup cannot leave the dd to delete some unrelated buffer instead.
 :let g:tl = g:term ? LineStarting(bufname(g:term)) : 0
 :if g:term | call Ok(g:tl > 0, 'the list has an entry for the terminal') | endif
 :if g:tl | call cursor(g:tl, 1) | endif
-:if g:tl | call Sync() | endif
 :if g:tl | execute "normal! dd" | endif
 :if g:tl | call Is(buflisted(g:term), 1, 'the terminal is still listed') | endif
 :if g:tl | call Ok(LineStarting(bufname(g:term)) > 0, 'its line came back') | endif
@@ -330,7 +413,6 @@ Only the leading buffer number is ever read back.
 :BufferList
 :let g:n = line('$')
 :call GotoEntry('a.txt')
-:call Sync()
 :execute "normal! A garbage garbage\<Esc>"
 :call Is(line('$'), g:n, 'the list still has the same number of lines')
 :call Is(buflisted(bufnr('a.txt')), 1, 'a.txt was not touched')
@@ -343,10 +425,8 @@ Only the leading buffer number is ever read back.
 :BufferList
 :let g:b = bufnr('a.txt')
 :call GotoEntry('a.txt')
-:call Sync()
 :execute "normal! dd"
 :call Is(buflisted(g:b), 0, 'a.txt unloaded')
-:call Sync()
 :execute "normal! ggO" . g:b . "\<Esc>"
 :call Is(buflisted(g:b), 1, 'writing its number on a line relisted it')
 
@@ -513,7 +593,6 @@ other window showing the buffer, which is the reason to swap it.
 :BufferList
 :call Is(winnr('$'), 2, 'the list in one window, b.txt in the other')
 :call GotoEntry('b.txt')
-:call Sync()
 :execute "normal! dd"
 :call Is(buflisted(bufnr('b.txt')), 0, 'b.txt was unloaded')
 :call Is(winnr('$'), 1, 'and the window showing it was closed')
@@ -529,15 +608,13 @@ other window showing the buffer, which is the reason to swap it.
 :BufferList
 :let g:b = bufnr('b.txt')
 :call GotoEntry('b.txt')
-:call Sync()
 :execute "normal! dd"
 :call Is(g:deleted, [g:b], 'the command ran once, given the buffer number')
 :call Is(buflisted(g:b), 0, 'b.txt was unloaded')
 :call Is(winnr('$'), 2, 'the window that showed it is still open')
 :call Is(LineOf('b.txt'), 0, 'its line is gone from the list')
 :call Is(buflisted(bufnr('a.txt')), 1, 'a.txt was left alone')
-:call Sync()
-:execute "normal! u"
+:execute "normal u"
 :call Is(buflisted(g:b), 1, 'u still relists it')
 :call Ok(LineOf('b.txt') > 0, 'and its line is back')
 :only
@@ -551,7 +628,6 @@ other window showing the buffer, which is the reason to swap it.
 :BufferList
 :let g:a = bufnr('a.txt')
 :call GotoEntry('a.txt')
-:call Sync()
 :execute "normal! dd"
 :call Is(g:deleted, [g:a], 'the command was asked to delete a.txt')
 :call Is(buflisted(g:a), 1, 'a.txt is still listed')
@@ -606,7 +682,7 @@ fires none of the events that redraw the list otherwise.
 :wincmd p
 :if g:hints_supported | call Ok(join(Hints()) =~# '+ = modified', 'and the legend explains +') | endif
 :wincmd p
-:execute "normal! u"
+:execute "normal u"
 :call Ok(match(getbufline(g:list, 1, '$'), g:clean) >= 0, 'undoing back to unmodified clears it')
 :call Sync()
 :call setline(1, 'unsaved change')
@@ -625,13 +701,11 @@ property belongs to its line: dd takes it along, and u brings it back.
 :edit a.txt
 :edit b.txt
 :BufferList
-:call Sync()
 :execute "normal! ggdd"
 :call Is(buflisted(bufnr('a.txt')), 0, 'dd on line 1 unloaded a.txt')
 :if g:hints_supported | call Is(len(filter(HintLines(), 'v:val[1] =~# "<CR> to open"')), 1, 'one set of hints after dd') | endif
 :if g:hints_supported | call Is(filter(HintLines(), 'v:val[0] != 1'), [], 'all of them above the new line 1') | endif
-:call Sync()
-:execute "normal! u"
+:execute "normal u"
 :call Is(buflisted(bufnr('a.txt')), 1, 'u relisted a.txt')
 :if g:hints_supported | call Is(len(filter(HintLines(), 'v:val[1] =~# "<CR> to open"')), 1, 'still one set after u') | endif
 :if g:hints_supported | call Is(filter(HintLines(), 'v:val[0] != 1'), [], 'still all above line 1') | endif

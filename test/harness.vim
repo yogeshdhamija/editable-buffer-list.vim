@@ -62,18 +62,14 @@ function! Reset() abort
     silent! %bwipeout!
 endfunction
 
-" Call this before any edit whose undo behaviour matters.
+" Call this before an edit in an ordinary buffer whose undo behaviour
+" matters. The list needs none of it: its undo is the plugin's own, not Vim's.
 "
 " Interactive typing starts a fresh undo block per command. Input replayed
 " from a script file arrives with no gap and can skip that boundary, so an
-" edit merges into the plugin's own preceding redraw -- and `u` then steps
-" back past both, to the empty buffer left by :enew. That makes perfectly good
-" undo look catastrophically broken. Assigning 'undolevels' to itself forces
-" the block break that real typing gets for free.
-"
-" This is the harness compensating for its own input method, not the plugin
-" needing help: the same sequence driven over nvim's RPC socket, with real
-" gaps between keystrokes, produces this behaviour without it.
+" edit merges into the one before it, and `u` steps back past both.
+" Assigning 'undolevels' to itself forces the block break that real typing
+" gets for free.
 function! Sync() abort
     let &l:undolevels = &l:undolevels
 endfunction

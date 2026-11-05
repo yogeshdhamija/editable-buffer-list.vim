@@ -14,7 +14,8 @@
 #
 # The one thing replayed keystrokes do not reproduce is the undo-block
 # boundary that real typing puts between commands -- see Sync() in
-# harness.vim, which the driver calls before any edit that undo depends on.
+# harness.vim, which the driver calls before any edit in an ordinary buffer
+# that undo depends on.
 
 set -eu
 
