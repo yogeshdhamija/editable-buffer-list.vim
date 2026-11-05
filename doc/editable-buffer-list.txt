@@ -1,35 +1,14 @@
-*editable-buffer-list.txt*
+*editable-buffer-list.txt*  The buffer list as an editable buffer
 
 Author: Yogesh Dhamija <yogeshdhamija@outlook.com>
 
-								 *:BufferList*
-This plugin provides |:BufferList|, which turns the current window into the
-buffer list -- as a plain, editable buffer. It is to buffers roughly what
-oil.nvim is to files: the list is just text, and editing the text edits
-reality.
+                                                                 *:BufferList*
+:BufferList		Show the buffer list in the current window as a plain,
+			editable buffer. Edits take effect immediately -- there
+			is nothing to save -- and the list updates itself as
+			buffers change elsewhere.
 
-Unlike oil.nvim, there is nothing to save: every edit applies the moment it
-is made. And the list keeps itself up to date: it redraws whenever a buffer
-is opened, deleted, renamed, written or modified, in any window, and when
-windows open or close. A few changes fire no event for it to catch, and
-show up at the next redraw instead: |:bunload|, or a terminal's job
-ending.
-
-The text is |:ls| output -- same columns, same flags -- with two changes:
-the lines are sorted, alphabetically by name unless you pick another order
-with `gs` (see |editable-buffer-list-sort|), and the "line N" at the end of
-each is left off (it is only the cursor line Vim last remembered for that
-buffer, so it is usually out of date). It is produced by
-running |:ls| in the list's own window, which is what makes the markers read
-correctly: the list buffer is 'nobuflisted', so it never appears in its own
-output and no line is ever marked `%`. The `#` sits on the buffer the window
-was showing before |:BufferList| replaced it, and stays there no matter what
-other windows do.
-
-Above the list are hints: that it is live, what the keys do, and what the
-flags in front of each name mean, with a rule underneath to set them off from
-the list. Only the flags actually in the list are explained, so the legend
-changes as the list does: >
+The list is |:ls| output, with hints above it: >
 
   see :h :BufferList | Updates Live!
   <CR> to open | delete line to :bdelete | u to undo
@@ -40,158 +19,83 @@ changes as the list does: >
     2      "notes.txt"
     3 #h   "plugin.vim"
 <
-"no a/h" is the third flag column left blank: the buffer is listed, but not
-loaded, as after |:badd| or restoring a session. The full table of flags is
-at |:ls|.
+`#` marks the buffer you were on before opening the list. The legend only
+explains flags that appear in the list; see |:ls| for all of them. Hints need
+Neovim or Vim 9.0.0451+.
 
-The hints are virtual text, not lines of the buffer: they cannot be edited,
-deleted or yanked, and line 1 is still the first buffer. They take as many
-lines as it takes to fit the window, rather than being cut off at its edge.
-They need Neovim, or Vim 9.0.0451 or later; older versions go without. Turn
-them off with |g:editable_buffer_list_hints|.
+==============================================================================
+USAGE
 
-Deleting a line unloads (|:bdelete|) its buffer, immediately. Because the
-list is a real modifiable buffer, anything that removes text works: `dd`,
-`5dd`, `d2j`, `dG`, `Vd`, `:g/foo/d`. Nothing is remapped for this. The
-command used can be swapped out; see |g:editable_buffer_list_delete_command|.
+<CR>		Open the buffer under the cursor. CTRL-^ then goes back to
+		the buffer you were on before the list, so this is also how
+		to leave without picking anything.
 
-Putting a line back relists its buffer: `p` after `dd`, or a line pasted from
-another list. So does writing a bare buffer number on a line of its own.
-					*editable-buffer-list-undo*
-`u` undoes your last change to the buffer list, and `CTRL-R` redoes it. Both
-take a count, and go as far back and forth as you like: `dd` four times, then
-`u` four times, brings all four buffers back. A change is whatever one edit
-did -- the buffers a `dd` or `:g/foo/d` unloaded, or a `p` relisted -- and
-undoing it does the opposite. Since |:bdelete| only unlists a buffer rather
-than destroying it, a deleted buffer can be relisted; it comes back unloaded,
-as after |:badd|. Windows |:bdelete| closed stay closed. The cursor lands on
-the topmost buffer that came back.
+Deleting lines	Any way of deleting lines -- `dd`, `5dd`, `Vd`, `:g/foo/d` --
+		runs |:bdelete| on those buffers. A buffer with unsaved
+		changes refuses: its line comes back and the error is shown.
 
-This is the plugin's own undo, not Vim's: `u` and `CTRL-R` are mapped in the
-list, and Vim's undo is off there ('undolevels' -1), so `U`, `g-`, `g+`,
-|:undo| and |:earlier| do nothing. The history is kept as buffers rather than
-text, so the list redrawing itself never touches it: it survives `gs`,
-buffers opened or deleted elsewhere, and leaving the list and coming back.
-And it holds only changes made from a list: `u` never undoes anything done
-elsewhere. There is one history, shared by every list: `u` in one undoes a
-change made in another. A buffer wiped since (|:bwipeout|) cannot come back,
-so it drops out of the history. The history keeps as many changes as
-'undolevels' says (its global value), and lasts until Vim exits.
+Adding lines	Putting a deleted line back (`p` after `dd`), or typing a
+		buffer number on a line of its own, relists that buffer.
 
-<CR> opens the buffer under the cursor in this window. The alternate file is
-preserved (|keepalt|), so CTRL-^ afterwards goes to the buffer the window
-showed before the list -- as if the list was never there. That is also the
-way to leave without picking anything.
+                                                   *editable-buffer-list-undo*
+u  CTRL-R	Undo or redo your last change to the list; takes a count.
+		Deleted buffers come back unloaded, but windows closed by
+		|:bdelete| stay closed. History is shared by all lists and
+		survives leaving the list. Vim's other undo commands (`U`,
+		`g-`, |:undo|, ...) do nothing here.
 
-						*editable-buffer-list-sort*
-`gs` changes the order of the list, cycling through:
+                                                   *editable-buffer-list-sort*
+gs		Cycle the sort order of every list:
+		    name	alphabetical, ignoring case (default)
+		    used	most recently used first
+		    created	newest buffer first
 
-	name		alphabetically by name, ignoring case (the default)
-	used		most recently used first: the buffer the list
-			replaced, then the one before it, and so on. Buffers
-			never used, as after |:badd|, come last.
-	created		most recently created (highest buffer number) first
+Only the buffer number at the start of a line matters. Mangle the rest and the
+line is just redrawn.
 
-The hints list them all, with the one in effect in brackets. It is one
-setting for every list, |g:editable_buffer_list_sort|, which `gs` changes,
-so every list on screen re-sorts. However the lines move, each window's cursor stays on the entry it
-was on. With "used", a list on screen also re-sorts as buffers are used in
-other windows. Plain `s` would be the key in netrw or bufexplorer, but here
-it is an edit; `gs` is oil.nvim's key for the same thing.
+==============================================================================
+OPTIONS
 
-Buffers with unsaved changes refuse to unload: the line comes back and the
-|E89| message is shown. Save the buffer first, or use `:bdelete!` yourself if
-you mean to discard the changes. The same happens for anything else
-|:bdelete| refuses, such as a terminal with a running job.
+                                       *g:editable_buffer_list_delete_command*
+g:editable_buffer_list_delete_command	(default: "bdelete")
+	Command run on each deleted buffer, with the buffer number appended.
+	|:bdelete| closes every window showing the buffer; to keep them open,
+	use something like vim-bbye's `:Bdelete`: >
+		let g:editable_buffer_list_delete_command = 'Bdelete'
+<	The command must unlist the buffer, not wipe it, or `u` can't bring
+	it back.
 
-Only the leading buffer number on each line is ever read back; the rest of
-the line is redrawn from the real buffer list after every change. So mangling
-a line's text cannot corrupt anything -- the line is simply redrawn.
+                                                *g:editable_buffer_list_hints*
+g:editable_buffer_list_hints		(default: 1)
+	Set to 0 to hide the hints.
 
-Navigating away from the list leaves it in the |jumplist|, so CTRL-O comes
-back to it. It is redrawn on arrival, so a list returned to this way shows the
-buffer list as it is now, not as it was when you left.
+                                                 *g:editable_buffer_list_sort*
+g:editable_buffer_list_sort		(default: "name")
+	Starting sort order: "name", "used" or "created". `gs` changes it.
 
-The list buffer itself is 'buftype' nofile and 'bufhidden' hide: it never
-needs saving (changes apply as you make them) and never touches the buffer
-list it is displaying. It is kept rather than wiped when hidden, because a
-wiped buffer has its |jumplist| entries dropped along with it. Abandoned lists
-are reused by the next |:BufferList| rather than piling up; a list still
-visible in some window is never taken over, so each window keeps its own.
+==============================================================================
+FUNCTIONS
 
-A window showing the list highlights the cursor's row ('cursorline'), adding
-"line" to 'cursorlineopt' if it is not there already: set to just "number",
-it would highlight nothing but the line number. Line numbers and the sign
-column are left as the window has them. These are set with |:setlocal| each
-time the list is shown, so they last only as long as the window shows the
-list: switch it to another buffer, and its usual 'cursorline' and
-'cursorlineopt' come back. In Vim, with the cursor on the first entry, that
-row is highlighted only as far as its text goes, plus the line number if
-'cursorlineopt' includes it. Vim draws the hints as part of the first line,
-so 'cursorline' there would highlight all of them too.
-
-				      *g:editable_buffer_list_delete_command*
-The command run for each deleted line, with the buffer number appended. It
-defaults to |:bdelete|: >
-	let g:editable_buffer_list_delete_command = 'bdelete'
-<
-|:bdelete| closes every other window showing the buffer. To keep those
-windows open, point this at a command that moves them onto another buffer
-before deleting, such as vim-bbye's `:Bdelete`, or a user command wrapping
-mini.bufremove's `MiniBufremove.delete()`: >
-	let g:editable_buffer_list_delete_command = 'Bdelete'
-<
-The command must leave the buffer existing but unlisted, as |:bdelete| does;
-that is what lets `u` bring it back. A command that wipes buffers
-(|:bwipeout|) makes every delete permanent. If the command refuses a buffer,
-by raising an error or by leaving it listed, the line comes back. An error's
-message is shown, as with |E89| above. Whether unsaved changes or a running
-job are refused is up to the command.
-
-					*g:editable_buffer_list_hints*
-Whether to draw the hints above the list. Defaults to 1; set it to 0 to turn
-them off: >
-	let g:editable_buffer_list_hints = 0
-<
-Like the delete command, it is read on every redraw, so changing it takes
-effect the next time the list is drawn.
-
-						*g:editable_buffer_list_sort*
-The order of the list: "name", "used" or "created", as described at
-|editable-buffer-list-sort|. Defaults to "name". `gs` sets it; set it
-yourself to start with another order: >
-	let g:editable_buffer_list_sort = 'used'
-<
-It is read on every redraw. Anything else is taken as "name".
-
-				      *editableBufferList#PathUnderCursor()*
+                                        *editableBufferList#PathUnderCursor()*
 editableBufferList#PathUnderCursor()
-		The full path of the buffer on the cursor's line, as
-		`expand('%:p')` would give it in that buffer, for a command or
-		mapping that copies it. A name like "term://..." is given as
-		it is. Empty if the line has no buffer, or the buffer has no
-		name. For example, a `:CP` that works in the list too: >
-	function! CopyPath() abort
-	    let l:path = &filetype ==# 'bufferlist'
-	        \ ? editableBufferList#PathUnderCursor() : expand('%:p')
-	    let @+ = l:path
-	endfunction
-	command! CP call CopyPath()
+	Full path of the buffer under the cursor, or "" if there is none.
+	Handy for a copy-path command that also works in the list: >
+		function! CopyPath() abort
+		    let @+ = &filetype ==# 'bufferlist'
+		        \ ? editableBufferList#PathUnderCursor() : expand('%:p')
+		endfunction
+		command! CP call CopyPath()
 <
-				      *editable-buffer-list-highlights*
-The colors come from these groups, each linked by default to the one shown
-(see |highlight-groups|):
+==============================================================================
+HIGHLIGHTS
 
+                                             *editable-buffer-list-highlights*
+	Group			Used for			Default link ~
 	bufferListHint		the hints			Comment
-	bufferListHintKey	keys and commands in them	Special
-	bufferListHintCurrent	the sort order in effect,	Title
-				in brackets in the hints
-	bufferListNumber	buffer numbers in the list	Comment
-	bufferListUrl		names like "term://..." and	Identifier
-				"oil://...", which are not
-				files
+	bufferListHintKey	keys and commands in the hints	Special
+	bufferListHintCurrent	the current sort order		Title
+	bufferListNumber	buffer numbers			Comment
+	bufferListUrl		non-file names, like "term://"	Identifier
 	bufferListUrlScheme	the "term://" part of those	Special
 
-In Neovim, a flag in the legend is colored like the same flag in the list.
-In Vim, a line of virtual text has only one color, so the hints are all
-bufferListHint.
+In Vim (not Neovim), all hints use bufferListHint.
